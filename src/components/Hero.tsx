@@ -13,6 +13,10 @@ const Hero: React.FC<HeroProps> = ({ setActiveSection }) => {
     { icon: Heart, value: '95%', label: 'Taux de réussite' }
   ];
 
+  const handleInscriptionClick = () => {
+    window.open('https://www.jober.space/inscription', '_blank');
+  };
+
   return (
     <section className="relative bg-gradient-to-r from-blue-700 via-blue-600 to-green-600 text-white">
       <div className="absolute inset-0 bg-black opacity-20"></div>
@@ -36,7 +40,7 @@ const Hero: React.FC<HeroProps> = ({ setActiveSection }) => {
               Nos Programmes
             </button>
             <button 
-              onClick={() => setActiveSection('inscription')}
+              onClick={handleInscriptionClick}
               className="border-2 border-white text-white hover:bg-white hover:text-blue-700 px-8 py-4 rounded-lg text-lg font-semibold transition-all duration-300 transform hover:scale-105"
             >
               S'inscrire maintenant
