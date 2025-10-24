@@ -9,12 +9,16 @@ interface HeaderProps {
 const Header: React.FC<HeaderProps> = ({ activeSection, setActiveSection }) => {
   const [isMenuOpen, setIsMenuOpen] = React.useState(false);
 
+  const handleInscriptionClick = () => {
+    window.open('https://www.jober.space/inscription', '_blank');
+  };
+
   const navItems = [
     { id: 'accueil', label: 'Accueil' },
     { id: 'programmes', label: 'Programmes' },
     { id: 'contenu', label: 'Contenu' },
     //{ id: 'forum', label: 'Forum' },
-    { id: 'inscription', label: 'Inscription' },
+    { id: 'inscription', label: 'Inscription', external: true },
     { id: 'backoffice', label: 'Se Connecter' }
   ];
 
@@ -44,17 +48,27 @@ const Header: React.FC<HeaderProps> = ({ activeSection, setActiveSection }) => {
           {/* Desktop Navigation */}
           <nav className="hidden md:flex space-x-8">
             {navItems.map((item) => (
-              <button
-                key={item.id}
-                onClick={() => setActiveSection(item.id)}
-                className={`px-3 py-2 rounded-md text-sm font-medium transition-colors duration-200 ${
-                  activeSection === item.id
-                    ? 'bg-blue-100 text-blue-700'
-                    : 'text-gray-700 hover:bg-gray-100 hover:text-gray-900'
-                }`}
-              >
-                {item.label}
-              </button>
+              item.external ? (
+                <button
+                  key={item.id}
+                  onClick={handleInscriptionClick}
+                  className="px-3 py-2 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-100 hover:text-gray-900 transition-colors duration-200"
+                >
+                  {item.label}
+                </button>
+              ) : (
+                <button
+                  key={item.id}
+                  onClick={() => setActiveSection(item.id)}
+                  className={`px-3 py-2 rounded-md text-sm font-medium transition-colors duration-200 ${
+                    activeSection === item.id
+                      ? 'bg-blue-100 text-blue-700'
+                      : 'text-gray-700 hover:bg-gray-100 hover:text-gray-900'
+                  }`}
+                >
+                  {item.label}
+                </button>
+              )
             ))}
           </nav>
 
@@ -74,20 +88,33 @@ const Header: React.FC<HeaderProps> = ({ activeSection, setActiveSection }) => {
           <div className="md:hidden">
             <div className="px-2 pt-2 pb-3 space-y-1 sm:px-3 border-t border-gray-200">
               {navItems.map((item) => (
-                <button
-                  key={item.id}
-                  onClick={() => {
-                    setActiveSection(item.id);
-                    setIsMenuOpen(false);
-                  }}
-                  className={`block px-3 py-2 rounded-md text-base font-medium w-full text-left transition-colors duration-200 ${
-                    activeSection === item.id
-                      ? 'bg-blue-100 text-blue-700'
-                      : 'text-gray-700 hover:bg-gray-100 hover:text-gray-900'
-                  }`}
-                >
-                  {item.label}
-                </button>
+                item.external ? (
+                  <button
+                    key={item.id}
+                    onClick={() => {
+                      handleInscriptionClick();
+                      setIsMenuOpen(false);
+                    }}
+                    className="block px-3 py-2 rounded-md text-base font-medium w-full text-left text-gray-700 hover:bg-gray-100 hover:text-gray-900 transition-colors duration-200"
+                  >
+                    {item.label}
+                  </button>
+                ) : (
+                  <button
+                    key={item.id}
+                    onClick={() => {
+                      setActiveSection(item.id);
+                      setIsMenuOpen(false);
+                    }}
+                    className={`block px-3 py-2 rounded-md text-base font-medium w-full text-left transition-colors duration-200 ${
+                      activeSection === item.id
+                        ? 'bg-blue-100 text-blue-700'
+                        : 'text-gray-700 hover:bg-gray-100 hover:text-gray-900'
+                    }`}
+                  >
+                    {item.label}
+                  </button>
+                )
               ))}
             </div>
           </div>
