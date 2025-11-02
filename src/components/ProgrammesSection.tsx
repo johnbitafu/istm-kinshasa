@@ -28,56 +28,88 @@ const ProgrammesSection: React.FC = () => {
         setFilieres(mainForm.filieres);
         console.log(`✅ ${mainForm.filieres.length} filière(s) chargée(s)`);
       } else {
-        // Données de démonstration si aucune filière n'est trouvée
+        // Données de démonstration avec les 10 filières des captures d'écran
         const demoFilieres: Filiere[] = [
           {
             id: 'bm',
-            name: 'Biologie Médicale (BM)',
+            name: 'Biologie Médicale',
             mentions: [
-              'Techniques de laboratoire',
-              'Analyses biomédicales',
-              'Microbiologie médicale',
-              'Hématologie',
-              'Biochimie clinique'
-            ]
-          },
-          {
-            id: 'si',
-            name: 'Soins Infirmiers (SI)',
-            mentions: [
-              'Soins généraux',
-              'Soins intensifs',
-              'Pédiatrie',
-              'Chirurgie',
-              'Santé communautaire'
-            ]
-          },
-          {
-            id: 'im',
-            name: 'Imagerie Médicale (IM)',
-            mentions: [
-              'Radiologie conventionnelle',
-              'Échographie',
-              'Scanner (TDM)',
-              'IRM',
-              'Médecine nucléaire'
+              'Techniques de laboratoire'
             ]
           },
           {
             id: 'gos',
-            name: 'Gestion des Organisations de Santé (GOS)',
+            name: 'Gestion des Organisations de santé',
             mentions: [
-              'Management en Santé',
-              'Administration hospitalière',
-              'Économie de la santé',
-              'Qualité des soins',
-              'Systèmes d\'information santé'
+              'Management des services de santé',
+              'Gestion des opérations et des logistiques médicales'
+            ]
+          },
+          {
+            id: 'hstge',
+            name: 'Hygiène, Sécurité au Travail et Gestion de l\'Environnement',
+            mentions: [
+              'Hygiène, Sécurité au Travail et Gestion de l\'Environnement'
+            ]
+          },
+          {
+            id: 'im',
+            name: 'Imagerie Médicale',
+            mentions: [
+              'Techniques d\'imagerie médicale'
+            ]
+          },
+          {
+            id: 'smra',
+            name: 'Sciences de la Motricité et de la Résadaptation',
+            mentions: [
+              'Kinésithérapie'
+            ]
+          },
+          {
+            id: 'sand',
+            name: 'Sciences des aliments, Nutrition et Diététique',
+            mentions: [
+              'Sciences des aliments, Nutrition et Diététique'
+            ]
+          },
+          {
+            id: 'sf',
+            name: 'Sage-femme',
+            mentions: [
+              'Sage-femme'
+            ]
+          },
+          {
+            id: 'sc',
+            name: 'Santé communautaire',
+            mentions: [
+              'Santé communautaire'
+            ]
+          },
+          {
+            id: 'si',
+            name: 'Sciences infirmières',
+            mentions: [
+              'Anesthésie et réanimation',
+              'Enseignement et administration en soins infirmiers',
+              'Soins généraux',
+              'Santé mentale et soins psychiatriques',
+              'Soins oculaires',
+              'Soins pédiatriques'
+            ]
+          },
+          {
+            id: 'tp',
+            name: 'Techniques pharmaceutiques',
+            mentions: [
+              'Techniques pharmaceutiques'
             ]
           }
         ];
         
         setFilieres(demoFilieres);
-        console.log('📋 Utilisation des filières de démonstration');
+        console.log('📋 Utilisation des filières de démonstration (10 filières)');
       }
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Erreur inconnue';
@@ -91,17 +123,25 @@ const ProgrammesSection: React.FC = () => {
   const getFiliereIcon = (filiereId: string) => {
     switch (filiereId.toLowerCase()) {
       case 'bm':
-      case 'biologie':
         return '🔬';
-      case 'si':
-      case 'soins':
-        return '🏥';
-      case 'im':
-      case 'imagerie':
-        return '📡';
       case 'gos':
-      case 'gestion':
         return '📊';
+      case 'hstge':
+        return '🛡️';
+      case 'im':
+        return '📡';
+      case 'smra':
+        return '💪';
+      case 'sand':
+        return '🍎';
+      case 'sf':
+        return '👶';
+      case 'sc':
+        return '🏘️';
+      case 'si':
+        return '🏥';
+      case 'tp':
+        return '💊';
       default:
         return '🎓';
     }
@@ -114,7 +154,11 @@ const ProgrammesSection: React.FC = () => {
       'from-purple-500 to-purple-600',
       'from-orange-500 to-orange-600',
       'from-red-500 to-red-600',
-      'from-indigo-500 to-indigo-600'
+      'from-indigo-500 to-indigo-600',
+      'from-teal-500 to-teal-600',
+      'from-pink-500 to-pink-600',
+      'from-yellow-500 to-yellow-600',
+      'from-cyan-500 to-cyan-600'
     ];
     return colors[index % colors.length];
   };
@@ -126,7 +170,11 @@ const ProgrammesSection: React.FC = () => {
       'border-purple-200 hover:border-purple-400',
       'border-orange-200 hover:border-orange-400',
       'border-red-200 hover:border-red-400',
-      'border-indigo-200 hover:border-indigo-400'
+      'border-indigo-200 hover:border-indigo-400',
+      'border-teal-200 hover:border-teal-400',
+      'border-pink-200 hover:border-pink-400',
+      'border-yellow-200 hover:border-yellow-400',
+      'border-cyan-200 hover:border-cyan-400'
     ];
     return colors[index % colors.length];
   };
@@ -239,7 +287,7 @@ const ProgrammesSection: React.FC = () => {
                       <div className="flex items-center space-x-4 text-sm opacity-90">
                         <span className="flex items-center">
                           <BookOpen className="h-4 w-4 mr-1" />
-                          {filiere.mentions.length} mentions
+                          {filiere.mentions.length} mention{filiere.mentions.length > 1 ? 's' : ''}
                         </span>
                         <span className="flex items-center">
                           <Clock className="h-4 w-4 mr-1" />
