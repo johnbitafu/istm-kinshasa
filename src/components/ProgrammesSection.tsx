@@ -17,19 +17,9 @@ const ProgrammesSection: React.FC = () => {
     try {
       setLoading(true);
       setError(null);
-      
-      console.log('🎓 Chargement des filières depuis les formulaires...');
-      const forms = await getForms();
-      
-      // Extraire les filières du premier formulaire trouvé (généralement le formulaire d'inscription)
-      const mainForm = forms.find(form => form.status === 'published') || forms[0];
-      
-      if (mainForm && mainForm.filieres && mainForm.filieres.length > 0) {
-        setFilieres(mainForm.filieres);
-        console.log(`✅ ${mainForm.filieres.length} filière(s) chargée(s)`);
-      } else {
-        // Données de démonstration avec les 10 filières des captures d'écran
-        const demoFilieres: Filiere[] = [
+
+      // TOUJOURS utiliser les 10 filières complètes officielles de l'ISTM Kinshasa
+      const officialFilieres: Filiere[] = [
           {
             id: 'bm',
             name: 'Biologie Médicale',
@@ -107,10 +97,9 @@ const ProgrammesSection: React.FC = () => {
             ]
           }
         ];
-        
-        setFilieres(demoFilieres);
-        console.log('📋 Utilisation des filières de démonstration (10 filières)');
-      }
+
+      setFilieres(officialFilieres);
+      console.log(`✅ ${officialFilieres.length} filière(s) officielles chargées (ISTM Kinshasa)`);
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Erreur inconnue';
       setError(errorMessage);
@@ -364,9 +353,17 @@ const ProgrammesSection: React.FC = () => {
             Nos programmes sont conçus pour former les professionnels de santé de demain.
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
-            <button className="bg-white text-blue-600 px-8 py-4 rounded-lg font-semibold hover:bg-gray-100 transition-colors duration-300 transform hover:scale-105 shadow-lg">
-              Commencer l'inscription
-            </button>
+            <a
+              href="https://www.jober.space/inscription"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="bg-white text-blue-600 px-8 py-4 rounded-lg font-semibold hover:bg-gray-100 transition-colors duration-300 transform hover:scale-105 shadow-lg inline-flex items-center justify-center space-x-2"
+            >
+              <span>Commencer l'inscription</span>
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+              </svg>
+            </a>
             <button className="border-2 border-white text-white hover:bg-white hover:text-blue-600 px-8 py-4 rounded-lg font-semibold transition-all duration-300 transform hover:scale-105">
               Télécharger la brochure
             </button>
