@@ -9,16 +9,12 @@ interface HeaderProps {
 const Header: React.FC<HeaderProps> = ({ activeSection, setActiveSection }) => {
   const [isMenuOpen, setIsMenuOpen] = React.useState(false);
 
-  const handleInscriptionClick = () => {
-    window.open('https://www.jober.space/inscription', '_blank');
-  };
-
   const navItems = [
     { id: 'accueil', label: 'Accueil' },
     { id: 'programmes', label: 'Programmes' },
     { id: 'contenu', label: 'Contenu' },
     //{ id: 'forum', label: 'Forum' },
-    { id: 'inscription', label: 'Inscription', external: true },
+    { id: 'inscription', label: 'Inscription' },
     { id: 'backoffice', label: 'Se Connecter' }
   ];
 
@@ -47,16 +43,24 @@ const Header: React.FC<HeaderProps> = ({ activeSection, setActiveSection }) => {
 
           {/* Desktop Navigation */}
           <nav className="hidden md:flex space-x-8">
-            {navItems.map((item) => (
-              item.external ? (
-                <button
-                  key={item.id}
-                  onClick={handleInscriptionClick}
-                  className="px-3 py-2 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-100 hover:text-gray-900 transition-colors duration-200"
-                >
-                  {item.label}
-                </button>
-              ) : (
+            {navItems.map((item) => {
+              if (item.id === 'inscription') {
+                return (
+                  <a
+                    key={item.id}
+                    href="https://www.jober.space/inscription"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="px-3 py-2 rounded-md text-sm font-medium transition-colors duration-200 text-gray-700 hover:bg-gray-100 hover:text-gray-900 flex items-center space-x-1"
+                  >
+                    <span>{item.label}</span>
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                    </svg>
+                  </a>
+                );
+              }
+              return (
                 <button
                   key={item.id}
                   onClick={() => setActiveSection(item.id)}
@@ -68,8 +72,8 @@ const Header: React.FC<HeaderProps> = ({ activeSection, setActiveSection }) => {
                 >
                   {item.label}
                 </button>
-              )
-            ))}
+              );
+            })}
           </nav>
 
           {/* Mobile menu button */}
@@ -87,19 +91,25 @@ const Header: React.FC<HeaderProps> = ({ activeSection, setActiveSection }) => {
         {isMenuOpen && (
           <div className="md:hidden">
             <div className="px-2 pt-2 pb-3 space-y-1 sm:px-3 border-t border-gray-200">
-              {navItems.map((item) => (
-                item.external ? (
-                  <button
-                    key={item.id}
-                    onClick={() => {
-                      handleInscriptionClick();
-                      setIsMenuOpen(false);
-                    }}
-                    className="block px-3 py-2 rounded-md text-base font-medium w-full text-left text-gray-700 hover:bg-gray-100 hover:text-gray-900 transition-colors duration-200"
-                  >
-                    {item.label}
-                  </button>
-                ) : (
+              {navItems.map((item) => {
+                if (item.id === 'inscription') {
+                  return (
+                    <a
+                      key={item.id}
+                      href="https://www.jober.space/inscription"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="block px-3 py-2 rounded-md text-base font-medium w-full text-left transition-colors duration-200 text-gray-700 hover:bg-gray-100 hover:text-gray-900 flex items-center space-x-1"
+                      onClick={() => setIsMenuOpen(false)}
+                    >
+                      <span>{item.label}</span>
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                      </svg>
+                    </a>
+                  );
+                }
+                return (
                   <button
                     key={item.id}
                     onClick={() => {
@@ -114,8 +124,8 @@ const Header: React.FC<HeaderProps> = ({ activeSection, setActiveSection }) => {
                   >
                     {item.label}
                   </button>
-                )
-              ))}
+                );
+              })}
             </div>
           </div>
         )}

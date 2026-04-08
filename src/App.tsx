@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import Header from './components/Header';
 import NotificationBanner from './components/NotificationBanner';
@@ -20,6 +20,17 @@ function App() {
   const [activeSection, setActiveSection] = useState('accueil');
   const [showFeaturedContentModal, setShowFeaturedContentModal] = useState(true);
   const [selectedContentId, setSelectedContentId] = useState<string | null>(null);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const contenuId = params.get('contenu');
+    if (contenuId) {
+      setSelectedContentId(contenuId);
+      setActiveSection('contenu');
+      setShowFeaturedContentModal(false);
+      window.history.replaceState({}, '', window.location.pathname);
+    }
+  }, []);
 
   const renderActiveSection = () => {
     switch (activeSection) {

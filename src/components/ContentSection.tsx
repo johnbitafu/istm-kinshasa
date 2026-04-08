@@ -1,30 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { Play, FileText, MessageCircle, Heart, Eye, Calendar, X, Send, ArrowLeft, Share2, Bookmark, Edit3 } from 'lucide-react';
-import { collection, getDocs, query, where, addDoc, updateDoc, doc, Timestamp } from 'firebase/firestore';
-import { db } from '../lib/firebase';
-import type { DocumentSnapshot } from 'firebase/firestore';
+import { Play, FileText, MessageCircle, Heart, Eye, Calendar, X, Send, ArrowLeft, Share2, Bookmark, CreditCard as Edit3 } from 'lucide-react';
+import { getContentItems, addCommentToContentItem, updateContentItem } from '../lib/supabase';
+import type { ContentItem, Comment } from '../lib/supabase';
 import { useAuth } from './AuthGuard';
+import ShareModal from './ShareModal';
 
-interface Comment {
-  id?: string;
-  author: string;
-  content: string;
-  date: string;
-}
-
-interface ContentItem {
-  id: string;
-  type: 'video' | 'article' | 'document';
-  title: string;
-  description: string;
-  url: string;
-  thumbnail?: string;
-  author: string;
-  date: string;
-  likes: number;
-  views: number;
-  comments: Comment[];
-}
 
 interface ContentSectionProps {
   selectedContentId?: string | null;
@@ -37,10 +17,11 @@ const ContentSection: React.FC<ContentSectionProps> = ({ selectedContentId }) =>
   const [loading, setLoading] = useState(false);
   const [contentItems, setContentItems] = useState<ContentItem[]>([]);
   const [error, setError] = useState<string | null>(null);
-  const [lastDoc, setLastDoc] = useState<DocumentSnapshot | undefined>();
+  const [lastDoc, setLastDoc] = useState<string | undefined>();
   const [hasMore, setHasMore] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [commentTab, setCommentTab] = useState<'view' | 'write'>('view');
+  const [sharingContent, setSharingContent] = useState<ContentItem | null>(null);
 
   const ITEMS_PER_PAGE = 9; // 3x3 grid
 
@@ -48,38 +29,33 @@ const ContentSection: React.FC<ContentSectionProps> = ({ selectedContentId }) =>
 
   const loadContentItems = async (loadMore: boolean = false) => {
     try {
-      setLoading(true);
+      if (loadMore) {
+        setLoadingMore(true);
+      } else {
+        setLoading(true);
+      }
       setError(null);
-      console.log('🔍 Chargement du contenu depuis Firebase...');
+      console.log('🔍 Chargement du contenu depuis Supabase...');
 
-      const contentRef = collection(db, 'content_items');
-      const snapshot = await getDocs(contentRef);
+      const result = await getContentItems(ITEMS_PER_PAGE, loadMore ? lastDoc : undefined);
 
-      const items: ContentItem[] = snapshot.docs.map(doc => {
-        const data = doc.data();
-        return {
-          id: doc.id,
-          type: data.type || 'article',
-          title: data.title || '',
-          description: data.description || '',
-          url: data.url || '',
-          thumbnail: data.thumbnail || null,
-          author: data.author || 'Anonyme',
-          date: data.date || new Date().toISOString().split('T')[0],
-          likes: data.likes || 0,
-          views: data.views || 0,
-          comments: data.comments || []
-        };
-      });
+      if (loadMore) {
+        setContentItems(prev => [...prev, ...result.items]);
+      } else {
+        setContentItems(result.items);
+      }
 
-      setContentItems(items);
-      console.log(`✅ ${items.length} élément(s) de contenu chargé(s)`);
+      setLastDoc(result.lastDoc);
+      setHasMore(result.hasMore);
+
+      console.log(`✅ ${result.items.length} élément(s) de contenu chargé(s)`);
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Erreur inconnue';
       setError(errorMessage);
       console.error('❌ Erreur lors du chargement du contenu:', err);
     } finally {
       setLoading(false);
+      setLoadingMore(false);
     }
   };
 
@@ -128,28 +104,28 @@ const ContentSection: React.FC<ContentSectionProps> = ({ selectedContentId }) =>
       try {
         console.log('💬 Ajout d\'un commentaire...');
 
-        const contentRef = doc(db, 'content_items', contentId);
-        const comment: Comment = {
+        const comment: Partial<Comment> = {
           author: `${user.name} (${user.matricule})`,
-          content: newComment,
-          date: new Date().toISOString()
+          content: newComment
         };
 
-        const updatedComments = [...(selectedContent.comments || []), comment];
-        await updateDoc(contentRef, {
-          comments: updatedComments
-        });
-
-        setSelectedContent({ ...selectedContent, comments: updatedComments });
+        await addCommentToContentItem(contentId, comment);
 
         // Recharger le contenu pour obtenir les derniers commentaires
         await loadContentItems();
+
+        // Mettre à jour le contenu sélectionné
+        const updatedContent = contentItems.find(item => item.id === contentId);
+        if (updatedContent) {
+          setSelectedContent(updatedContent);
+        }
+
         console.log('✅ Commentaire ajouté avec succès');
       } catch (error) {
         console.error('❌ Erreur lors de l\'ajout du commentaire:', error);
         alert('Erreur lors de l\'ajout du commentaire');
       }
-      
+
       setNewComment('');
     }
   };
@@ -159,19 +135,22 @@ const ContentSection: React.FC<ContentSectionProps> = ({ selectedContentId }) =>
 
     try {
       console.log('❤️ Ajout d\'un like...');
-      const contentRef = doc(db, 'content_items', item.id);
       const newLikes = item.likes + 1;
 
-      await updateDoc(contentRef, { likes: newLikes });
+      await updateContentItem(item.id, { likes: newLikes });
 
-      setContentItems(prev => 
-        prev.map(contentItem => 
-          contentItem.id === item.id 
+      setContentItems(prev =>
+        prev.map(contentItem =>
+          contentItem.id === item.id
             ? { ...contentItem, likes: newLikes }
             : contentItem
         )
       );
-      
+
+      if (selectedContent && selectedContent.id === item.id) {
+        setSelectedContent({ ...selectedContent, likes: newLikes });
+      }
+
       console.log('✅ Like ajouté avec succès');
     } catch (error) {
       console.error('❌ Erreur lors de l\'ajout du like:', error);
@@ -466,6 +445,13 @@ const ContentSection: React.FC<ContentSectionProps> = ({ selectedContentId }) =>
                           <span className="font-medium">{selectedContent.comments.length}</span>
                         </button>
                       </div>
+                      <button
+                        onClick={() => setSharingContent(selectedContent)}
+                        className="flex items-center space-x-1 md:space-x-2 px-3 py-1.5 md:px-4 md:py-2 rounded-full bg-gray-100 text-gray-700 hover:bg-blue-50 hover:text-blue-600 transition-colors duration-200 text-sm md:text-base"
+                      >
+                        <Share2 className="h-4 w-4 md:h-5 md:w-5" />
+                        <span className="font-medium hidden md:inline">Partager</span>
+                      </button>
                     </div>
 
                     {/* Content Description */}
@@ -586,6 +572,16 @@ const ContentSection: React.FC<ContentSectionProps> = ({ selectedContentId }) =>
           </div>
         )}
       </div>
+
+      {sharingContent && (
+        <ShareModal
+          contentId={sharingContent.id}
+          title={sharingContent.title}
+          description={sharingContent.description}
+          thumbnail={sharingContent.thumbnail || sharingContent.url}
+          onClose={() => setSharingContent(null)}
+        />
+      )}
     </section>
   );
 };

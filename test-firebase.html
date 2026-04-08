@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Test Firebase ISTM</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      max-width: 800px;
+      margin: 50px auto;
+      padding: 20px;
+    }
+    .log {
+      background: #f5f5f5;
+      padding: 15px;
+      margin: 10px 0;
+      border-radius: 5px;
+      font-family: monospace;
+      white-space: pre-wrap;
+    }
+    .error { color: red; }
+    .success { color: green; }
+    button {
+      background: #4CAF50;
+      color: white;
+      padding: 10px 20px;
+      border: none;
+      border-radius: 5px;
+      cursor: pointer;
+      margin: 5px;
+    }
+    button:hover { background: #45a049; }
+  </style>
+</head>
+<body>
+  <h1>🔥 Test de connexion Firebase ISTM</h1>
+  <div id="logs"></div>
+
+  <button onclick="testAuth()">1. Tester l'authentification</button>
+  <button onclick="testRead()">2. Lire les données</button>
+  <button onclick="testWrite()">3. Écrire des données</button>
+  <button onclick="clearLogs()">Effacer les logs</button>
+
+  <script type="module">
+    import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js';
+    import { getAuth, signInAnonymously } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js';
+    import { getFirestore, collection, getDocs, addDoc, Timestamp } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js';
+
+    const firebaseConfig = {
+      apiKey: "AIzaSyDx5pczXRwKtPh0clhKycA_prnu9P2lT6w",
+      authDomain: "istm-kin.firebaseapp.com",
+      projectId: "istm-kin",
+      storageBucket: "istm-kin.firebasestorage.app",
+      messagingSenderId: "631252657421",
+      appId: "1:631252657421:web:c438b91d4c3238aaebbc44"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const auth = getAuth(app);
+    const db = getFirestore(app);
+
+    function log(message, type = 'info') {
+      const div = document.createElement('div');
+      div.className = 'log ' + type;
+      div.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
+      document.getElementById('logs').appendChild(div);
+      console.log(message);
+    }
+
+    window.testAuth = async function() {
+      try {
+        log('🔐 Test de l\'authentification anonyme...');
+        const result = await signInAnonymously(auth);
+        log('✅ Authentification réussie! UID: ' + result.user.uid, 'success');
+      } catch (error) {
+        log('❌ Erreur d\'authentification: ' + error.message, 'error');
+        log('Code d\'erreur: ' + error.code, 'error');
+      }
+    };
+
+    window.testRead = async function() {
+      try {
+        if (!auth.currentUser) {
+          log('⚠️ Vous devez d\'abord vous authentifier!', 'error');
+          return;
+        }
+
+        log('📖 Lecture des formulaires...');
+        const formsRef = collection(db, 'forms');
+        const snapshot = await getDocs(formsRef);
+        log(`✅ ${snapshot.size} formulaire(s) trouvé(s)`, 'success');
+
+        snapshot.forEach(doc => {
+          log(`  📋 ${doc.id}: ${doc.data().title || 'Sans titre'}`);
+        });
+
+        log('📖 Lecture du contenu...');
+        const contentRef = collection(db, 'content_items');
+        const contentSnapshot = await getDocs(contentRef);
+        log(`✅ ${contentSnapshot.size} contenu(s) trouvé(s)`, 'success');
+
+      } catch (error) {
+        log('❌ Erreur de lecture: ' + error.message, 'error');
+        log('Code d\'erreur: ' + error.code, 'error');
+      }
+    };
+
+    window.testWrite = async function() {
+      try {
+        if (!auth.currentUser) {
+          log('⚠️ Vous devez d\'abord vous authentifier!', 'error');
+          return;
+        }
+
+        log('✍️ Tentative d\'écriture de test...');
+        const contentRef = collection(db, 'content_items');
+
+        const testData = {
+          type: 'article',
+          title: 'Test de connexion - ' + new Date().toISOString(),
+          description: 'Ceci est un test pour vérifier la connexion Firebase',
+          url: '#',
+          author: 'Test Script',
+          date: new Date().toISOString().split('T')[0],
+          likes: 0,
+          views: 0,
+          comments: [],
+          created_at: Timestamp.now(),
+          updated_at: Timestamp.now()
+        };
+
+        const docRef = await addDoc(contentRef, testData);
+        log('✅ Écriture réussie! ID: ' + docRef.id, 'success');
+        log('✅ Vous pouvez maintenant créer du contenu sur votre site!', 'success');
+
+      } catch (error) {
+        log('❌ Erreur d\'écriture: ' + error.message, 'error');
+        log('Code d\'erreur: ' + error.code, 'error');
+
+        if (error.code === 'permission-denied') {
+          log('⚠️ PROBLÈME: Les règles Firestore bloquent l\'écriture!', 'error');
+          log('📋 Solution: Allez sur https://console.firebase.google.com/', 'error');
+          log('   1. Sélectionnez votre projet "istm-kin"', 'error');
+          log('   2. Allez dans Firestore Database > Rules', 'error');
+          log('   3. Remplacez les règles par:', 'error');
+          log(`
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /{document=**} {
+      allow read, write: if request.auth != null;
+    }
+  }
+}
+          `, 'error');
+          log('   4. Cliquez sur "Publier"', 'error');
+        }
+      }
+    };
+
+    window.clearLogs = function() {
+      document.getElementById('logs').innerHTML = '';
+    };
+
+    // Auto-test au chargement
+    log('🚀 Page de test chargée. Cliquez sur les boutons pour tester.');
+    log('📍 Projet Firebase: istm-kin');
+  </script>
+</body>
+</html>

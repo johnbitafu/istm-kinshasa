@@ -13,10 +13,6 @@ const Hero: React.FC<HeroProps> = ({ setActiveSection }) => {
     { icon: Heart, value: '95%', label: 'Taux de réussite' }
   ];
 
-  const handleInscriptionClick = () => {
-    window.open('https://www.jober.space/inscription', '_blank');
-  };
-
   return (
     <section className="relative bg-gradient-to-r from-blue-700 via-blue-600 to-green-600 text-white">
       <div className="absolute inset-0 bg-black opacity-20"></div>
@@ -33,18 +29,23 @@ const Hero: React.FC<HeroProps> = ({ setActiveSection }) => {
           </p>
           
           <div className="flex flex-col sm:flex-row gap-4 justify-center mb-16">
-            <button 
+            <button
               onClick={() => setActiveSection('programmes')}
               className="bg-green-500 hover:bg-green-600 text-white px-8 py-4 rounded-lg text-lg font-semibold transition-all duration-300 transform hover:scale-105 shadow-lg"
             >
               Nos Programmes
             </button>
-            <button 
-              onClick={handleInscriptionClick}
-              className="border-2 border-white text-white hover:bg-white hover:text-blue-700 px-8 py-4 rounded-lg text-lg font-semibold transition-all duration-300 transform hover:scale-105"
+            <a
+              href="https://www.jober.space/inscription"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="border-2 border-white text-white hover:bg-white hover:text-blue-700 px-8 py-4 rounded-lg text-lg font-semibold transition-all duration-300 transform hover:scale-105 inline-flex items-center justify-center space-x-2"
             >
-              S'inscrire maintenant
-            </button>
+              <span>S'inscrire maintenant</span>
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+              </svg>
+            </a>
           </div>
 
           {/* Stats */}
