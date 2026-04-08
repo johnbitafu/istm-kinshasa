@@ -1,10 +1,11 @@
 import React, { useState } from 'react';
-import { Plus, Edit, Trash2, Users, Calendar, MessageSquare, BookOpen, Settings, BarChart3, Bell, FileText, Lock, Image } from 'lucide-react';
+import { Plus, CreditCard as Edit, Trash2, Users, Calendar, MessageSquare, BookOpen, Settings, BarChart3, Bell, FileText, Lock, Image } from 'lucide-react';
 import DynamicFormBuilder from './DynamicFormBuilder';
 import { useAuth } from './AuthGuard';
 import FirebaseDiagnostics from './FirebaseDiagnostics';
 import ContentManagement from './ContentManagement';
-import DatabaseSelector from './DatabaseSelector';
+import { createEvent } from '../lib/firebase';
+import type { Event as FirebaseEvent } from '../lib/firebase';
 
 interface Event {
   id: string;
@@ -169,9 +170,10 @@ const BackOffice: React.FC = () => {
         return;
       }
 
-      // Créer le nouvel événement
-      const eventToCreate: Event = {
-        id: Date.now().toString(),
+      console.log('💾 Sauvegarde de l\'événement dans Firebase...');
+
+      // Créer l'événement dans Firebase
+      const eventData: Partial<FirebaseEvent> = {
         type: selectedEventType,
         title: newEvent.title,
         description: newEvent.description,
@@ -179,13 +181,30 @@ const BackOffice: React.FC = () => {
         time: newEvent.time,
         location: newEvent.location,
         instructor: newEvent.instructor || undefined,
-        participants: 0,
-        maxParticipants: newEvent.maxParticipants ? parseInt(newEvent.maxParticipants) : undefined,
+        max_participants: newEvent.maxParticipants ? parseInt(newEvent.maxParticipants) : undefined,
         status: 'draft'
       };
 
-      // Ajouter à la liste des événements
-      setEvents(prev => [...prev, eventToCreate]);
+      const createdEvent = await createEvent(eventData);
+
+      console.log('✅ Événement sauvegardé avec succès!');
+
+      // Ajouter l'événement créé à la liste locale
+      const eventToDisplay: Event = {
+        id: createdEvent.id,
+        type: createdEvent.type,
+        title: createdEvent.title,
+        description: createdEvent.description,
+        date: createdEvent.date,
+        time: createdEvent.time,
+        location: createdEvent.location,
+        instructor: createdEvent.instructor,
+        participants: createdEvent.participants,
+        maxParticipants: createdEvent.max_participants,
+        status: createdEvent.status
+      };
+
+      setEvents(prev => [eventToDisplay, ...prev]);
 
       // Réinitialiser le formulaire
       setNewEvent({
@@ -200,12 +219,11 @@ const BackOffice: React.FC = () => {
       setSelectedEventType('event');
       setShowCreateModal(false);
 
-      // Optionnel: Afficher un message de succès
-      console.log('Événement créé avec succès:', eventToCreate);
+      alert('Événement créé avec succès!');
 
     } catch (error) {
-      console.error('Erreur lors de la création de l\'événement:', error);
-      setSubmitError('Erreur lors de la création de l\'événement');
+      console.error('❌ Erreur lors de la création de l\'événement:', error);
+      setSubmitError('Erreur lors de la création de l\'événement. Veuillez réessayer.');
     } finally {
       setIsSubmitting(false);
     }
@@ -217,8 +235,6 @@ const BackOffice: React.FC = () => {
 
   const renderDashboard = () => (
     <div className="space-y-6">
-      <DatabaseSelector />
-
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         <div className="bg-white p-6 rounded-xl shadow-md">
           <div className="flex items-center justify-between">
