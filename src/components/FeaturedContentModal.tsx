@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { Play, FileText, Image, Eye, Heart, MessageCircle, ChevronLeft, ChevronRight, ArrowRight, X } from 'lucide-react';
-import { collection, getDocs, query, orderBy, limit } from 'firebase/firestore';
-import { db } from '../lib/firebase';
+import { Play, FileText, Image, Eye, Heart, MessageCircle, ChevronLeft, ChevronRight, ArrowRight, X, Share2 } from 'lucide-react';
+import { supabase } from '../lib/supabase';
+import ShareModal from './ShareModal';
 
 interface ContentItem {
   id: string;
@@ -15,6 +15,8 @@ interface ContentItem {
   likes: number;
   views: number;
   comments: any[];
+  is_featured?: boolean;
+  featured_order?: number;
 }
 
 interface FeaturedContentModalProps {
@@ -29,6 +31,7 @@ const FeaturedContentModal: React.FC<FeaturedContentModalProps> = ({ onClose, se
   const [error, setError] = useState<string | null>(null);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isAutoPlaying, setIsAutoPlaying] = useState(true);
+  const [sharingItem, setSharingItem] = useState<ContentItem | null>(null);
 
   useEffect(() => {
     loadFeaturedContent();
@@ -50,39 +53,42 @@ const FeaturedContentModal: React.FC<FeaturedContentModalProps> = ({ onClose, se
       setLoading(true);
       setError(null);
 
-      console.log('🎯 Chargement du contenu vedette depuis Firebase...');
+      const { data, error: fetchError } = await supabase
+        .from('content_items')
+        .select('*')
+        .order('created_at', { ascending: false })
+        .limit(6);
 
-      const contentRef = collection(db, 'content_items');
-      const q = query(contentRef, orderBy('created_at', 'desc'), limit(6));
-      const snapshot = await getDocs(q);
+      if (fetchError) throw fetchError;
 
-      const items: ContentItem[] = snapshot.docs.map(doc => {
-        const data = doc.data();
-        return {
-          id: doc.id,
-          type: data.type || 'article',
-          title: data.title || '',
-          description: data.description || '',
-          url: data.url || '',
-          thumbnail: data.thumbnail || null,
-          author: data.author || 'Anonyme',
-          date: data.date || new Date().toISOString().split('T')[0],
-          likes: data.likes || 0,
-          views: data.views || 0,
-          comments: data.comments || []
-        };
+      const items: ContentItem[] = (data || []).map((row: any) => ({
+        id: row.id,
+        type: row.type || 'article',
+        title: row.title || '',
+        description: row.description || '',
+        url: row.url || '',
+        thumbnail: row.thumbnail || null,
+        author: row.author || 'Anonyme',
+        date: row.date || new Date().toISOString().split('T')[0],
+        likes: row.likes || 0,
+        views: row.views || 0,
+        comments: row.comments || [],
+        is_featured: row.is_featured || false,
+        featured_order: row.featured_order || 0
+      }));
+
+      items.sort((a, b) => {
+        if (a.is_featured && !b.is_featured) return -1;
+        if (!a.is_featured && b.is_featured) return 1;
+        if (a.is_featured && b.is_featured) return (a.featured_order || 0) - (b.featured_order || 0);
+        return 0;
       });
 
-      if (items.length > 0) {
-        setContentItems(items);
-        console.log(`✅ ${items.length} élément(s) de contenu chargé(s) pour le modal`);
-      } else {
-        console.log('📭 Aucun contenu disponible pour le modal');
-      }
+      setContentItems(items);
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Erreur inconnue';
       setError(errorMessage);
-      console.error('❌ Erreur lors du chargement du contenu vedette:', err);
+      console.error('Erreur lors du chargement du contenu vedette:', err);
     } finally {
       setLoading(false);
     }
@@ -187,6 +193,7 @@ const FeaturedContentModal: React.FC<FeaturedContentModalProps> = ({ onClose, se
   const ContentIcon = getContentIcon(currentItem.type);
 
   return (
+    <>
     <div className="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-50 p-4" onClick={handleBackdropClick}>
       <div className="bg-white rounded-2xl shadow-2xl overflow-hidden max-w-4xl w-full max-h-[90vh] relative">
         {/* Close Button */}
@@ -271,13 +278,20 @@ const FeaturedContentModal: React.FC<FeaturedContentModalProps> = ({ onClose, se
                   </div>
                   
                   {/* Action Button */}
-                  <div className="flex items-center space-x-4">
+                  <div className="flex items-center space-x-4 flex-wrap gap-y-2">
                     <button
                       onClick={() => onSelectContent(currentItem.id)}
                       className="bg-white text-gray-900 px-6 py-3 rounded-lg font-semibold hover:bg-gray-100 transition-colors duration-200 flex items-center space-x-2 shadow-lg"
                     >
                       <span>Découvrir</span>
                       <ArrowRight className="h-4 w-4" />
+                    </button>
+                    <button
+                      onClick={() => setSharingItem(currentItem)}
+                      className="bg-white/20 backdrop-blur-sm hover:bg-white/30 text-white px-4 py-3 rounded-lg font-semibold transition-colors duration-200 flex items-center space-x-2 shadow-lg border border-white/30"
+                    >
+                      <Share2 className="h-4 w-4" />
+                      <span>Partager</span>
                     </button>
                     <span className="text-sm opacity-75">
                       Par {currentItem.author} • {new Date(currentItem.date).toLocaleDateString('fr-FR')}
@@ -346,6 +360,17 @@ const FeaturedContentModal: React.FC<FeaturedContentModalProps> = ({ onClose, se
         </div>
       </div>
     </div>
+
+    {sharingItem && (
+      <ShareModal
+        contentId={sharingItem.id}
+        title={sharingItem.title}
+        description={sharingItem.description}
+        thumbnail={sharingItem.thumbnail || sharingItem.url}
+        onClose={() => setSharingItem(null)}
+      />
+    )}
+    </>
   );
 };
 
