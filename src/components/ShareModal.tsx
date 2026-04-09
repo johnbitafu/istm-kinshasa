@@ -13,7 +13,8 @@ const ShareModal: React.FC<ShareModalProps> = ({ contentId, title, description, 
   const [copied, setCopied] = useState(false);
 
   const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-  const shareUrl = `${supabaseUrl}/functions/v1/og-preview?contenu=${contentId}`;
+  const appUrl = window.location.origin;
+  const shareUrl = `${supabaseUrl}/functions/v1/og-preview?contenu=${contentId}&app_url=${encodeURIComponent(appUrl)}`;
   const plainDescription = description.replace(/<[^>]*>/g, '').substring(0, 120);
 
   const handleCopy = async () => {

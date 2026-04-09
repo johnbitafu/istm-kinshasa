@@ -6,10 +6,9 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Client-Info, Apikey",
 };
 
-const SITE_URL = "https://www.istm-kinshasa.ac.cd";
+const FALLBACK_SITE_URL = "https://www.istm-kinshasa.ac.cd";
 const SITE_NAME = "ISTM Kinshasa - Institut Supérieur des Techniques Médicales";
 const SITE_DESCRIPTION = "Institut Supérieur des Techniques Médicales de Kinshasa - Formation médicale d'excellence";
-const DEFAULT_IMAGE = `${SITE_URL}/image.png`;
 
 Deno.serve(async (req: Request) => {
   try {
@@ -19,11 +18,15 @@ Deno.serve(async (req: Request) => {
 
     const url = new URL(req.url);
     const contentId = url.searchParams.get("contenu");
+    const appUrl = url.searchParams.get("app_url") || FALLBACK_SITE_URL;
+
+    const siteUrl = appUrl.replace(/\/$/, "");
+    const defaultImage = `${siteUrl}/image.png`;
 
     if (!contentId) {
       return new Response(null, {
         status: 302,
-        headers: { ...corsHeaders, Location: SITE_URL },
+        headers: { ...corsHeaders, Location: siteUrl },
       });
     }
 
@@ -33,23 +36,28 @@ Deno.serve(async (req: Request) => {
 
     const { data: content } = await supabase
       .from("content_items")
-      .select("id, title, description, thumbnail, type")
+      .select("id, title, description, thumbnail, images, type")
       .eq("id", contentId)
       .maybeSingle();
 
-    const targetUrl = `${SITE_URL}/?contenu=${contentId}`;
+    const shareParams = new URLSearchParams({ contenu: contentId, app_url: appUrl });
+    const canonicalUrl = `${Deno.env.get("SUPABASE_URL")}/functions/v1/og-preview?${shareParams.toString()}`;
+    const targetUrl = `${siteUrl}/?contenu=${contentId}`;
 
     let title = SITE_NAME;
     let description = SITE_DESCRIPTION;
-    let image = DEFAULT_IMAGE;
+    let image = defaultImage;
 
     if (content) {
       title = `${content.title} - ISTM Kinshasa`;
       description = content.description
         ? content.description.replace(/<[^>]*>/g, "").substring(0, 200)
         : SITE_DESCRIPTION;
-      if (content.thumbnail) {
+
+      if (content.thumbnail && content.thumbnail.trim() !== "") {
         image = content.thumbnail;
+      } else if (Array.isArray(content.images) && content.images.length > 0 && content.images[0]) {
+        image = content.images[0];
       }
     }
 
@@ -71,7 +79,7 @@ Deno.serve(async (req: Request) => {
   <meta property="og:image" content="${escaped(image)}" />
   <meta property="og:image:width" content="1200" />
   <meta property="og:image:height" content="630" />
-  <meta property="og:url" content="${escaped(targetUrl)}" />
+  <meta property="og:url" content="${escaped(canonicalUrl)}" />
 
   <meta name="twitter:card" content="summary_large_image" />
   <meta name="twitter:title" content="${escaped(title)}" />
@@ -79,7 +87,7 @@ Deno.serve(async (req: Request) => {
   <meta name="twitter:image" content="${escaped(image)}" />
 
   <meta http-equiv="refresh" content="0; url=${escaped(targetUrl)}" />
-  <script>window.location.replace("${targetUrl.replace(/"/g, '\\"')}");</script>
+  <script>window.location.replace(${JSON.stringify(targetUrl)});</script>
 </head>
 <body>
   <p>Redirection en cours... <a href="${escaped(targetUrl)}">Cliquez ici</a></p>
