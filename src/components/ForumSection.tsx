@@ -4,6 +4,7 @@ import { collection, getDocs, addDoc, updateDoc, doc, Timestamp } from 'firebase
 import { db } from '../lib/firebase';
 import type { DocumentSnapshot } from 'firebase/firestore';
 import { useAuth } from './AuthGuard';
+import StudentLoginModal from './StudentLoginModal';
 
 interface ForumPost {
   id: string;
@@ -43,6 +44,8 @@ const ForumSection: React.FC = () => {
     category: 'general',
     content: ''
   });
+
+  const [showLoginModal, setShowLoginModal] = useState(false);
 
   const { user, isStudent } = useAuth();
 
@@ -134,7 +137,7 @@ const ForumSection: React.FC = () => {
   const handleAddReply = async (postId: string) => {
     if (newReply.trim() && selectedPost) {
       if (!user || !isStudent()) {
-        alert('Vous devez être connecté en tant qu\'étudiant pour répondre');
+        setShowLoginModal(true);
         return;
       }
 
@@ -165,9 +168,9 @@ const ForumSection: React.FC = () => {
 
   const handleCreatePost = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     if (!user || !isStudent()) {
-      alert('Vous devez être connecté en tant qu\'étudiant pour poser une question');
+      setShowLoginModal(true);
       return;
     }
     
@@ -225,13 +228,18 @@ const ForumSection: React.FC = () => {
             </p>
           </div>
           
-          <button 
-            onClick={() => setShowNewPost(true)}
-           disabled={!user || !isStudent()}
+          <button
+            onClick={() => {
+              if (!user || !isStudent()) {
+                setShowLoginModal(true);
+              } else {
+                setShowNewPost(true);
+              }
+            }}
             className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg font-semibold transition-colors duration-200 flex items-center space-x-2"
           >
             <Plus className="h-5 w-5" />
-           <span>{user && isStudent() ? 'Nouvelle Question' : 'Connexion requise'}</span>
+            <span>{user && isStudent() ? 'Nouvelle Question' : 'Se connecter'}</span>
           </button>
         </div>
 
@@ -507,6 +515,12 @@ const ForumSection: React.FC = () => {
           </div>
         )}
       </div>
+
+      {showLoginModal && (
+        <StudentLoginModal
+          onClose={() => setShowLoginModal(false)}
+        />
+      )}
     </section>
   );
 };

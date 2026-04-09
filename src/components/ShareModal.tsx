@@ -12,8 +12,8 @@ interface ShareModalProps {
 const ShareModal: React.FC<ShareModalProps> = ({ contentId, title, description, thumbnail, onClose }) => {
   const [copied, setCopied] = useState(false);
 
-  const baseUrl = window.location.origin + window.location.pathname;
-  const shareUrl = `${baseUrl}?contenu=${contentId}`;
+  const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+  const shareUrl = `${supabaseUrl}/functions/v1/og-preview?contenu=${contentId}`;
   const plainDescription = description.replace(/<[^>]*>/g, '').substring(0, 120);
 
   const handleCopy = async () => {

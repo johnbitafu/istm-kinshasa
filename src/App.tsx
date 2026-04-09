@@ -13,13 +13,14 @@ import ForumSection from './components/ForumSection';
 import RegistrationSection from './components/RegistrationSection';
 import BackOffice from './components/BackOffice';
 import DataMigration from './components/DataMigration';
-import AuthGuard, { AuthProvider } from './components/AuthGuard';
+import AuthGuard, { AuthProvider, useAuth } from './components/AuthGuard';
 import Footer from './components/Footer';
 
-function App() {
+function AppContent() {
   const [activeSection, setActiveSection] = useState('accueil');
   const [showFeaturedContentModal, setShowFeaturedContentModal] = useState(true);
   const [selectedContentId, setSelectedContentId] = useState<string | null>(null);
+  const { user, isStudent } = useAuth();
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -31,6 +32,12 @@ function App() {
       window.history.replaceState({}, '', window.location.pathname);
     }
   }, []);
+
+  useEffect(() => {
+    if (user && isStudent() && activeSection === 'backoffice') {
+      setActiveSection('accueil');
+    }
+  }, [user, activeSection]);
 
   const renderActiveSection = () => {
     switch (activeSection) {
@@ -74,30 +81,36 @@ function App() {
   };
 
   return (
+    <div className="min-h-screen bg-gray-50">
+      <NotificationBanner />
+      <ConnectionStatus />
+      <Header activeSection={activeSection} setActiveSection={setActiveSection} />
+      <main>
+        {renderActiveSection()}
+      </main>
+
+      {/* Featured Content Modal */}
+      {showFeaturedContentModal && activeSection === 'accueil' && (
+        <FeaturedContentModal
+          onClose={() => setShowFeaturedContentModal(false)}
+          setActiveSection={setActiveSection}
+          onSelectContent={(contentId) => {
+            setSelectedContentId(contentId);
+            setActiveSection('contenu');
+            setShowFeaturedContentModal(false);
+          }}
+        />
+      )}
+
+      {activeSection !== 'backoffice' && <Footer />}
+    </div>
+  );
+}
+
+function App() {
+  return (
     <AuthProvider>
-      <div className="min-h-screen bg-gray-50">
-        <NotificationBanner />
-        <ConnectionStatus />
-        <Header activeSection={activeSection} setActiveSection={setActiveSection} />
-        <main>
-          {renderActiveSection()}
-        </main>
-        
-        {/* Featured Content Modal */}
-        {showFeaturedContentModal && activeSection === 'accueil' && (
-          <FeaturedContentModal
-            onClose={() => setShowFeaturedContentModal(false)}
-            setActiveSection={setActiveSection}
-            onSelectContent={(contentId) => {
-              setSelectedContentId(contentId);
-              setActiveSection('contenu');
-              setShowFeaturedContentModal(false);
-            }}
-          />
-        )}
-        
-        {activeSection !== 'backoffice' && <Footer />}
-      </div>
+      <AppContent />
     </AuthProvider>
   );
 }

@@ -1,9 +1,47 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import ReactQuill from 'react-quill';
 import 'react-quill/dist/quill.snow.css';
-import { Plus, CreditCard as Edit, Trash2, Eye, Image, Video, FileText, Calendar, User, Heart, MessageCircle, Upload, X, Link, Pin, PinOff } from 'lucide-react';
-import { supabase, createContentItem, updateContentItem, deleteContentItem, getContentItems } from '../lib/supabase';
+import { Plus, CreditCard as Edit, Trash2, Eye, Image, Video, FileText, Calendar, User, Heart, MessageCircle, Upload, X, Link, Pin, PinOff, GripVertical, ImagePlus } from 'lucide-react';
+import { supabase, createContentItem, updateContentItem, deleteContentItem } from '../lib/supabase';
 import type { ContentItem } from '../lib/supabase';
+
+interface ContentType {
+  id: string;
+  value: string;
+  label: string;
+  is_base: boolean;
+}
+
+interface ImageEntry {
+  id: string;
+  src: string;
+  file?: File;
+  uploading?: boolean;
+  uploaded?: boolean;
+}
+
+const quillModules = {
+  toolbar: [
+    [{ 'header': [1, 2, 3, 4, 5, 6, false] }],
+    ['bold', 'italic', 'underline', 'strike'],
+    [{ 'color': [] }, { 'background': [] }],
+    [{ 'font': [] }],
+    [{ 'align': [] }],
+    [{ 'list': 'ordered'}, { 'list': 'bullet' }],
+    [{ 'indent': '-1'}, { 'indent': '+1' }],
+    ['blockquote', 'code-block'],
+    ['link', 'image'],
+    ['clean']
+  ],
+};
+
+const quillFormats = [
+  'header', 'font', 'size',
+  'bold', 'italic', 'underline', 'strike', 'blockquote',
+  'list', 'bullet', 'indent',
+  'link', 'image', 'color', 'background',
+  'align', 'code-block'
+];
 
 const ContentManagement: React.FC = () => {
   const [contentItems, setContentItems] = useState<ContentItem[]>([]);
@@ -11,48 +49,30 @@ const ContentManagement: React.FC = () => {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [editingContent, setEditingContent] = useState<ContentItem | null>(null);
   const [selectedContent, setSelectedContent] = useState<ContentItem | null>(null);
-  const [newContentData, setNewContentData] = useState({
-    type: 'article' as 'image' | 'video' | 'article' | 'communique' | 'annonce' | 'actualite',
+  const [formData, setFormData] = useState({
+    type: 'article',
     title: '',
     description: '',
-    url: '',
-    thumbnail: '',
     author: ''
   });
+  const [images, setImages] = useState<ImageEntry[]>([]);
+  const [urlInput, setUrlInput] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState('');
-  const [customContentTypes, setCustomContentTypes] = useState<string[]>([]);
+  const [contentTypes, setContentTypes] = useState<ContentType[]>([]);
   const [newContentType, setNewContentType] = useState('');
   const [showAddContentType, setShowAddContentType] = useState(false);
-  const [uploadMode, setUploadMode] = useState<'url' | 'file'>('url');
-  const [selectedFile, setSelectedFile] = useState<File | null>(null);
-  const [filePreview, setFilePreview] = useState<string | null>(null);
-  const [uploadProgress, setUploadProgress] = useState(0);
-  const [isUploading, setIsUploading] = useState(false);
+  const [isDraggingOver, setIsDraggingOver] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const quillModules = {
-    toolbar: [
-      [{ 'header': [1, 2, 3, 4, 5, 6, false] }],
-      ['bold', 'italic', 'underline', 'strike'],
-      [{ 'color': [] }, { 'background': [] }],
-      [{ 'font': [] }],
-      [{ 'align': [] }],
-      [{ 'list': 'ordered'}, { 'list': 'bullet' }],
-      [{ 'indent': '-1'}, { 'indent': '+1' }],
-      ['blockquote', 'code-block'],
-      ['link', 'image'],
-      ['clean']
-    ],
+  const loadContentTypes = async () => {
+    const { data } = await supabase
+      .from('content_types')
+      .select('*')
+      .order('is_base', { ascending: false })
+      .order('label', { ascending: true });
+    if (data) setContentTypes(data as ContentType[]);
   };
-
-  const quillFormats = [
-    'header', 'font', 'size',
-    'bold', 'italic', 'underline', 'strike', 'blockquote',
-    'list', 'bullet', 'indent',
-    'link', 'image', 'color', 'background',
-    'align', 'code-block'
-  ];
 
   const loadContentItems = async () => {
     try {
@@ -61,9 +81,7 @@ const ContentManagement: React.FC = () => {
         .from('content_items')
         .select('*')
         .order('created_at', { ascending: false });
-
       if (error) throw error;
-
       const items = (data || []) as any[];
       items.sort((a, b) => {
         if (a.is_featured && !b.is_featured) return -1;
@@ -71,10 +89,9 @@ const ContentManagement: React.FC = () => {
         if (a.is_featured && b.is_featured) return (a.featured_order || 0) - (b.featured_order || 0);
         return 0;
       });
-
       setContentItems(items as ContentItem[]);
-    } catch (error) {
-      console.error('Erreur lors du chargement du contenu:', error);
+    } catch (err) {
+      console.error(err);
     } finally {
       setLoading(false);
     }
@@ -82,6 +99,7 @@ const ContentManagement: React.FC = () => {
 
   useEffect(() => {
     loadContentItems();
+    loadContentTypes();
   }, []);
 
   const getTypeIcon = (type: string) => {
@@ -104,129 +122,120 @@ const ContentManagement: React.FC = () => {
     }
   };
 
-  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    if (!file.type.startsWith('image/')) {
-      setSubmitError('Seules les images sont acceptées (JPG, PNG, GIF, WebP)');
-      return;
-    }
-
-    if (file.size > 10 * 1024 * 1024) {
-      setSubmitError('L\'image ne doit pas dépasser 10 MB');
-      return;
-    }
-
-    setSelectedFile(file);
-    setSubmitError('');
-    const reader = new FileReader();
-    reader.onloadend = () => {
-      setFilePreview(reader.result as string);
-    };
-    reader.readAsDataURL(file);
+  const getTypeLabel = (typeValue: string) => {
+    const found = contentTypes.find(t => t.value === typeValue);
+    return found ? found.label : typeValue.charAt(0).toUpperCase() + typeValue.slice(1);
   };
 
-  const uploadImageToSupabase = async (file: File): Promise<string> => {
-    setIsUploading(true);
-    setUploadProgress(10);
-
-    const fileExt = file.name.split('.').pop();
-    const fileName = `${Date.now()}-${Math.random().toString(36).substring(2)}.${fileExt}`;
-    const filePath = `uploads/${fileName}`;
-
-    setUploadProgress(40);
-
-    const { error: uploadError } = await supabase.storage
-      .from('content-images')
-      .upload(filePath, file, { upsert: false });
-
-    if (uploadError) throw uploadError;
-
-    setUploadProgress(80);
-
-    const { data } = supabase.storage
-      .from('content-images')
-      .getPublicUrl(filePath);
-
-    setUploadProgress(100);
-    setIsUploading(false);
-
+  const uploadFile = async (file: File): Promise<string> => {
+    const ext = file.name.split('.').pop();
+    const path = `uploads/${Date.now()}-${Math.random().toString(36).substring(2)}.${ext}`;
+    const { error } = await supabase.storage.from('content-images').upload(path, file, { upsert: false });
+    if (error) throw error;
+    const { data } = supabase.storage.from('content-images').getPublicUrl(path);
     return data.publicUrl;
   };
 
-  const handleCreateContent = async (e: React.FormEvent) => {
+  const addFilesToImages = useCallback((files: FileList | File[]) => {
+    const allowed = ['image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/svg+xml'];
+    Array.from(files).forEach(file => {
+      if (!allowed.includes(file.type)) return;
+      if (file.size > 10 * 1024 * 1024) return;
+      const id = `local-${Date.now()}-${Math.random()}`;
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setImages(prev => [...prev, { id, src: reader.result as string, file, uploading: false, uploaded: false }]);
+      };
+      reader.readAsDataURL(file);
+    });
+  }, []);
+
+  const handleFilePick = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files) addFilesToImages(e.target.files);
+    e.target.value = '';
+  };
+
+  const handleDropZoneDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDraggingOver(false);
+    if (e.dataTransfer.files) addFilesToImages(e.dataTransfer.files);
+  };
+
+  const handleAddUrl = () => {
+    const url = urlInput.trim();
+    if (!url) return;
+    const id = `url-${Date.now()}-${Math.random()}`;
+    setImages(prev => [...prev, { id, src: url, uploaded: true }]);
+    setUrlInput('');
+  };
+
+  const removeImage = (id: string) => {
+    setImages(prev => prev.filter(img => img.id !== id));
+  };
+
+  const moveImage = (id: string, direction: -1 | 1) => {
+    setImages(prev => {
+      const idx = prev.findIndex(img => img.id === id);
+      if (idx < 0) return prev;
+      const newIdx = idx + direction;
+      if (newIdx < 0 || newIdx >= prev.length) return prev;
+      const arr = [...prev];
+      [arr[idx], arr[newIdx]] = [arr[newIdx], arr[idx]];
+      return arr;
+    });
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsSubmitting(true);
     setSubmitError('');
 
     try {
-      if (!newContentData.title || !newContentData.description) {
+      if (!formData.title || !formData.description) {
         setSubmitError('Veuillez remplir tous les champs obligatoires');
         setIsSubmitting(false);
         return;
       }
-
-      if (uploadMode === 'file' && !selectedFile && !newContentData.url) {
-        setSubmitError('Veuillez sélectionner une image à télécharger');
+      if (images.length === 0) {
+        setSubmitError('Veuillez ajouter au moins une image');
         setIsSubmitting(false);
         return;
       }
 
-      if (uploadMode === 'url' && !newContentData.url) {
-        setSubmitError('Veuillez saisir une URL');
-        setIsSubmitting(false);
-        return;
+      const uploadedUrls: string[] = [];
+      for (const img of images) {
+        if (img.file && !img.uploaded) {
+          setImages(prev => prev.map(i => i.id === img.id ? { ...i, uploading: true } : i));
+          const url = await uploadFile(img.file);
+          setImages(prev => prev.map(i => i.id === img.id ? { ...i, uploading: false, uploaded: true, src: url } : i));
+          uploadedUrls.push(url);
+        } else {
+          uploadedUrls.push(img.src);
+        }
       }
 
-      let finalUrl = newContentData.url;
-
-      if (uploadMode === 'file' && selectedFile) {
-        finalUrl = await uploadImageToSupabase(selectedFile);
-        handleInputChange('url', finalUrl);
-      }
+      const firstUrl = uploadedUrls[0];
+      const payload = {
+        type: formData.type as any,
+        title: formData.title,
+        description: formData.description,
+        url: firstUrl,
+        thumbnail: firstUrl,
+        images: uploadedUrls,
+        author: formData.author || (editingContent?.author ?? 'Administrateur'),
+      };
 
       if (editingContent) {
-        await updateContentItem(editingContent.id, {
-          type: newContentData.type,
-          title: newContentData.title,
-          description: newContentData.description,
-          url: finalUrl,
-          thumbnail: newContentData.thumbnail,
-          author: newContentData.author || editingContent.author,
-        });
+        await updateContentItem(editingContent.id, payload);
       } else {
-        await createContentItem({
-          type: newContentData.type,
-          title: newContentData.title,
-          description: newContentData.description,
-          url: finalUrl,
-          thumbnail: newContentData.thumbnail,
-          author: newContentData.author || 'Administrateur',
-        });
+        await createContentItem(payload);
       }
 
       await loadContentItems();
-
-      setNewContentData({
-        type: 'article',
-        title: '',
-        description: '',
-        url: '',
-        thumbnail: '',
-        author: ''
-      });
-      setSelectedFile(null);
-      setFilePreview(null);
-      setUploadMode('url');
-      setUploadProgress(0);
-      setEditingContent(null);
-      setShowCreateModal(false);
-    } catch (error) {
-      console.error('Erreur lors de l\'opération:', error);
-      setIsUploading(false);
-      setUploadProgress(0);
-      setSubmitError(editingContent ? 'Erreur lors de la modification du contenu' : 'Erreur lors de la création du contenu');
+      resetModal();
+    } catch (err) {
+      console.error(err);
+      setSubmitError('Erreur lors de l\'enregistrement du contenu');
     } finally {
       setIsSubmitting(false);
     }
@@ -236,123 +245,91 @@ const ContentManagement: React.FC = () => {
     setShowCreateModal(false);
     setSubmitError('');
     setEditingContent(null);
-    setSelectedFile(null);
-    setFilePreview(null);
-    setUploadMode('url');
-    setUploadProgress(0);
-    setNewContentData({
-      type: 'article',
-      title: '',
-      description: '',
-      url: '',
-      thumbnail: '',
-      author: ''
-    });
+    setImages([]);
+    setUrlInput('');
+    setFormData({ type: 'article', title: '', description: '', author: '' });
   };
 
   const handleEditContent = (item: ContentItem) => {
     setEditingContent(item);
-    setSelectedFile(null);
-    setFilePreview(item.url && (item.type === 'image') ? item.url : null);
-    setUploadMode(item.url && item.url.includes('supabase') ? 'file' : 'url');
-    setNewContentData({
-      type: item.type as any,
+    const existing: ImageEntry[] = [];
+    const imgs = item.images && item.images.length > 0 ? item.images : (item.thumbnail || item.url ? [item.thumbnail || item.url] : []);
+    imgs.forEach((src, i) => {
+      existing.push({ id: `existing-${i}`, src, uploaded: true });
+    });
+    setImages(existing);
+    setFormData({
+      type: item.type,
       title: item.title,
       description: item.description,
-      url: item.url,
-      thumbnail: item.thumbnail || '',
       author: item.author
     });
     setShowCreateModal(true);
   };
 
   const handleDeleteContent = async (item: ContentItem) => {
-    if (!confirm(`Êtes-vous sûr de vouloir supprimer "${item.title}" ? Cette action est irréversible.`)) {
-      return;
-    }
-
+    if (!confirm(`Supprimer "${item.title}" ? Cette action est irréversible.`)) return;
     try {
       await deleteContentItem(item.id);
-      setContentItems(prev => prev.filter(content => content.id !== item.id));
-      if (selectedContent?.id === item.id) {
-        setSelectedContent(null);
-      }
-    } catch (error) {
-      console.error('Erreur lors de la suppression:', error);
-      alert('Erreur lors de la suppression du contenu');
+      setContentItems(prev => prev.filter(c => c.id !== item.id));
+      if (selectedContent?.id === item.id) setSelectedContent(null);
+    } catch {
+      alert('Erreur lors de la suppression');
     }
   };
 
-  const handleInputChange = (field: string, value: string) => {
-    setNewContentData(prev => ({ ...prev, [field]: value }));
-  };
-
-  const handleAddCustomContentType = () => {
-    if (newContentType.trim() && !customContentTypes.includes(newContentType.trim().toLowerCase())) {
-      setCustomContentTypes(prev => [...prev, newContentType.trim().toLowerCase()]);
+  const handleAddCustomContentType = async () => {
+    const trimmed = newContentType.trim();
+    if (!trimmed) return;
+    const slug = trimmed.toLowerCase().replace(/\s+/g, '_');
+    const label = trimmed.charAt(0).toUpperCase() + trimmed.slice(1);
+    const { error } = await supabase.from('content_types').insert({ value: slug, label, is_base: false });
+    if (!error) {
+      await loadContentTypes();
       setNewContentType('');
       setShowAddContentType(false);
+    } else {
+      alert('Ce type existe déjà ou une erreur est survenue.');
     }
+  };
+
+  const handleDeleteContentType = async (type: ContentType) => {
+    if (type.is_base) return;
+    if (!confirm(`Supprimer le type "${type.label}" ?`)) return;
+    await supabase.from('content_types').delete().eq('id', type.id);
+    await loadContentTypes();
   };
 
   const handleToggleFeatured = async (item: ContentItem) => {
     try {
       const newFeatured = !(item as any).is_featured;
       let newOrder = (item as any).featured_order || 0;
-
       if (newFeatured) {
         const featuredItems = contentItems.filter(i => (i as any).is_featured && i.id !== item.id);
-        newOrder = featuredItems.length > 0
-          ? Math.max(...featuredItems.map(i => (i as any).featured_order || 0)) + 1
-          : 0;
+        newOrder = featuredItems.length > 0 ? Math.max(...featuredItems.map(i => (i as any).featured_order || 0)) + 1 : 0;
       }
-
-      const { error } = await supabase
-        .from('content_items')
-        .update({
-          is_featured: newFeatured,
-          featured_order: newFeatured ? newOrder : 0,
-          updated_at: new Date().toISOString()
-        })
+      const { error } = await supabase.from('content_items')
+        .update({ is_featured: newFeatured, featured_order: newFeatured ? newOrder : 0, updated_at: new Date().toISOString() })
         .eq('id', item.id);
-
       if (error) throw error;
-
       setContentItems(prev => {
-        const updated = prev.map(i =>
-          i.id === item.id ? { ...i, is_featured: newFeatured, featured_order: newFeatured ? newOrder : 0 } : i
-        );
+        const updated = prev.map(i => i.id === item.id ? { ...i, is_featured: newFeatured, featured_order: newFeatured ? newOrder : 0 } : i);
         updated.sort((a, b) => {
-          const aFeatured = (a as any).is_featured;
-          const bFeatured = (b as any).is_featured;
-          if (aFeatured && !bFeatured) return -1;
-          if (!aFeatured && bFeatured) return 1;
-          if (aFeatured && bFeatured) return ((a as any).featured_order || 0) - ((b as any).featured_order || 0);
+          const af = (a as any).is_featured, bf = (b as any).is_featured;
+          if (af && !bf) return -1; if (!af && bf) return 1;
+          if (af && bf) return ((a as any).featured_order || 0) - ((b as any).featured_order || 0);
           return 0;
         });
         return updated;
       });
-    } catch (error) {
-      console.error('Erreur lors de la mise en avant:', error);
+    } catch (err) {
+      console.error(err);
     }
   };
 
-  const getAllContentTypes = () => {
-    const baseTypes = [
-      { value: 'article', label: 'Article' },
-      { value: 'image', label: 'Image' },
-      { value: 'video', label: 'Vidéo' },
-      { value: 'communique', label: 'Communiqué' },
-      { value: 'annonce', label: 'Annonce' },
-      { value: 'actualite', label: 'Actualité' }
-    ];
-
-    const customTypes = customContentTypes.map(type => ({
-      value: type,
-      label: type.charAt(0).toUpperCase() + type.slice(1)
-    }));
-
-    return [...baseTypes, ...customTypes];
+  const getFirstImage = (item: ContentItem) => {
+    if (item.images && item.images.length > 0) return item.images[0];
+    return item.thumbnail || item.url;
   };
 
   return (
@@ -360,20 +337,18 @@ const ContentManagement: React.FC = () => {
       <div className="flex justify-between items-center">
         <div>
           <h2 className="text-2xl font-bold text-gray-900">Gestion du Contenu Éducatif</h2>
-          <p className="text-gray-600 mt-1">
-            {contentItems.length} élément(s) de contenu
-          </p>
+          <p className="text-gray-600 mt-1">{contentItems.length} élément(s) de contenu</p>
         </div>
-
         <button
           onClick={() => setShowCreateModal(true)}
-          className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg font-semibold transition-colors duration-200 flex items-center space-x-2"
+          className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg font-semibold transition-colors flex items-center space-x-2"
         >
           <Plus className="h-5 w-5" />
           <span>Nouveau Contenu</span>
         </button>
       </div>
 
+      {/* Content Table */}
       <div className="bg-white rounded-xl shadow-md overflow-hidden">
         {loading ? (
           <div className="flex justify-center items-center h-32">
@@ -383,9 +358,6 @@ const ContentManagement: React.FC = () => {
           <div className="text-center py-12">
             <Image className="h-12 w-12 mx-auto mb-4 text-gray-300" />
             <p className="text-gray-500 text-lg">Aucun contenu créé</p>
-            <p className="text-gray-400 text-sm mt-2">
-              Commencez par créer votre premier élément de contenu éducatif
-            </p>
           </div>
         ) : (
           <div className="overflow-x-auto">
@@ -396,7 +368,7 @@ const ContentManagement: React.FC = () => {
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Type</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Auteur</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Statistiques</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Stats</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">En avant</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
                 </tr>
@@ -404,23 +376,25 @@ const ContentManagement: React.FC = () => {
               <tbody className="bg-white divide-y divide-gray-200">
                 {contentItems.map((item) => {
                   const isFeatured = (item as any).is_featured;
-                  const featuredOrder = (item as any).featured_order;
                   const TypeIcon = getTypeIcon(item.type);
+                  const imgSrc = getFirstImage(item);
+                  const photoCount = (item.images?.length || 0) > 1 ? item.images!.length : 0;
                   return (
                     <tr key={item.id} className={`hover:bg-gray-50 ${isFeatured ? 'bg-amber-50' : ''}`}>
                       <td className="px-6 py-4">
                         <div className="flex items-center">
-                          <div className="flex-shrink-0 h-12 w-12 relative">
-                            {item.type === 'image' ? (
-                              <img
-                                src={item.thumbnail || item.url}
-                                alt={item.title}
-                                className="h-12 w-12 rounded-lg object-cover"
-                              />
+                          <div className="flex-shrink-0 h-12 w-16 relative">
+                            {imgSrc ? (
+                              <img src={imgSrc} alt={item.title} className="h-12 w-16 rounded-lg object-cover" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
                             ) : (
-                              <div className="h-12 w-12 bg-gray-100 rounded-lg flex items-center justify-center">
-                                <TypeIcon className="h-6 w-6 text-gray-600" />
+                              <div className="h-12 w-16 bg-gray-100 rounded-lg flex items-center justify-center">
+                                <TypeIcon className="h-6 w-6 text-gray-400" />
                               </div>
+                            )}
+                            {photoCount > 1 && (
+                              <span className="absolute -bottom-1 -right-1 bg-blue-600 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center font-bold">
+                                {photoCount}
+                              </span>
                             )}
                             {isFeatured && (
                               <span className="absolute -top-1 -right-1 bg-amber-400 rounded-full w-4 h-4 flex items-center justify-center">
@@ -432,7 +406,7 @@ const ContentManagement: React.FC = () => {
                             <div className="text-sm font-medium text-gray-900 line-clamp-1 flex items-center gap-1.5">
                               {isFeatured && (
                                 <span className="text-xs font-semibold text-amber-600 bg-amber-100 px-1.5 py-0.5 rounded">
-                                  #{(featuredOrder || 0) + 1}
+                                  #{((item as any).featured_order || 0) + 1}
                                 </span>
                               )}
                               {item.title}
@@ -443,7 +417,7 @@ const ContentManagement: React.FC = () => {
                       </td>
                       <td className="px-6 py-4">
                         <span className={`px-2 py-1 rounded-full text-xs font-medium ${getTypeColor(item.type)}`}>
-                          {item.type}
+                          {getTypeLabel(item.type)}
                         </span>
                       </td>
                       <td className="px-6 py-4 text-sm text-gray-900">
@@ -460,60 +434,24 @@ const ContentManagement: React.FC = () => {
                       </td>
                       <td className="px-6 py-4 text-sm text-gray-500">
                         <div className="flex items-center space-x-4">
-                          <span className="flex items-center">
-                            <Heart className="h-4 w-4 mr-1 text-red-400" />
-                            {item.likes}
-                          </span>
-                          <span className="flex items-center">
-                            <Eye className="h-4 w-4 mr-1 text-blue-400" />
-                            {item.views}
-                          </span>
-                          <span className="flex items-center">
-                            <MessageCircle className="h-4 w-4 mr-1 text-green-400" />
-                            {(item.comments || []).length}
-                          </span>
+                          <span className="flex items-center"><Heart className="h-4 w-4 mr-1 text-red-400" />{item.likes}</span>
+                          <span className="flex items-center"><Eye className="h-4 w-4 mr-1 text-blue-400" />{item.views}</span>
+                          <span className="flex items-center"><MessageCircle className="h-4 w-4 mr-1 text-green-400" />{(item.comments || []).length}</span>
                         </div>
                       </td>
                       <td className="px-6 py-4">
                         <button
                           onClick={() => handleToggleFeatured(item)}
-                          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
-                            isFeatured
-                              ? 'bg-amber-100 text-amber-700 hover:bg-amber-200'
-                              : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
-                          }`}
-                          title={isFeatured ? 'Retirer du carrousel' : 'Mettre en avant dans le carrousel'}
+                          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${isFeatured ? 'bg-amber-100 text-amber-700 hover:bg-amber-200' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}`}
                         >
-                          {isFeatured ? (
-                            <><PinOff className="h-3.5 w-3.5" />Retirer</>
-                          ) : (
-                            <><Pin className="h-3.5 w-3.5" />Épingler</>
-                          )}
+                          {isFeatured ? <><PinOff className="h-3.5 w-3.5" />Retirer</> : <><Pin className="h-3.5 w-3.5" />Épingler</>}
                         </button>
                       </td>
                       <td className="px-6 py-4">
                         <div className="flex items-center space-x-2">
-                          <button
-                            onClick={() => setSelectedContent(item)}
-                            className="text-blue-600 hover:text-blue-900 p-1 rounded"
-                            title="Voir les détails"
-                          >
-                            <Eye className="h-4 w-4" />
-                          </button>
-                          <button
-                            onClick={() => handleEditContent(item)}
-                            className="text-green-600 hover:text-green-900 p-1 rounded"
-                            title="Modifier"
-                          >
-                            <Edit className="h-4 w-4" />
-                          </button>
-                          <button
-                            onClick={() => handleDeleteContent(item)}
-                            className="text-red-600 hover:text-red-900 p-1 rounded"
-                            title="Supprimer"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </button>
+                          <button onClick={() => setSelectedContent(item)} className="text-blue-600 hover:text-blue-900 p-1 rounded" title="Voir"><Eye className="h-4 w-4" /></button>
+                          <button onClick={() => handleEditContent(item)} className="text-green-600 hover:text-green-900 p-1 rounded" title="Modifier"><Edit className="h-4 w-4" /></button>
+                          <button onClick={() => handleDeleteContent(item)} className="text-red-600 hover:text-red-900 p-1 rounded" title="Supprimer"><Trash2 className="h-4 w-4" /></button>
                         </div>
                       </td>
                     </tr>
@@ -525,6 +463,48 @@ const ContentManagement: React.FC = () => {
         )}
       </div>
 
+      {/* Types Manager */}
+      <div className="bg-white rounded-xl shadow-md p-6">
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <h3 className="text-lg font-bold text-gray-900">Types de contenu</h3>
+            <p className="text-sm text-gray-500 mt-0.5">Gérez les types disponibles lors de la création de contenu</p>
+          </div>
+          <button onClick={() => setShowAddContentType(true)} className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium transition-colors">
+            <Plus className="h-4 w-4" />
+            Ajouter un type
+          </button>
+        </div>
+        {showAddContentType && (
+          <div className="mb-4 flex items-center gap-2 p-3 bg-blue-50 rounded-lg border border-blue-200">
+            <input
+              type="text"
+              value={newContentType}
+              onChange={(e) => setNewContentType(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && handleAddCustomContentType()}
+              placeholder="Nom du nouveau type (ex: Conférence)"
+              className="flex-1 p-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500"
+              autoFocus
+            />
+            <button onClick={handleAddCustomContentType} className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700 font-medium">Ajouter</button>
+            <button onClick={() => { setShowAddContentType(false); setNewContentType(''); }} className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg text-sm hover:bg-gray-300 font-medium">Annuler</button>
+          </div>
+        )}
+        <div className="flex flex-wrap gap-2">
+          {contentTypes.map(type => (
+            <div key={type.id} className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-sm font-medium ${getTypeColor(type.value)}`}>
+              <span>{type.label}</span>
+              {!type.is_base && (
+                <button onClick={() => handleDeleteContentType(type)} className="ml-1 hover:text-red-600 transition-colors" title={`Supprimer "${type.label}"`}>
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              )}
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Create/Edit Modal */}
       {showCreateModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
@@ -533,7 +513,7 @@ const ContentManagement: React.FC = () => {
                 <h2 className="text-2xl font-bold text-gray-900">
                   {editingContent ? 'Modifier le Contenu' : 'Créer un Nouveau Contenu'}
                 </h2>
-                <button onClick={resetModal} className="text-gray-500 hover:text-gray-700 text-2xl">×</button>
+                <button onClick={resetModal} className="text-gray-400 hover:text-gray-600 p-1"><X className="h-6 w-6" /></button>
               </div>
 
               {submitError && (
@@ -542,63 +522,27 @@ const ContentManagement: React.FC = () => {
                 </div>
               )}
 
-              <form onSubmit={handleCreateContent} className="space-y-6">
+              <form onSubmit={handleSubmit} className="space-y-6">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">Type de contenu</label>
-                  <div className="flex space-x-2">
-                    <select
-                      value={newContentData.type}
-                      onChange={(e) => handleInputChange('type', e.target.value)}
-                      className="flex-1 p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                      required
-                    >
-                      {getAllContentTypes().map(type => (
-                        <option key={type.value} value={type.value}>{type.label}</option>
-                      ))}
-                    </select>
-                    <button
-                      type="button"
-                      onClick={() => setShowAddContentType(!showAddContentType)}
-                      className="px-4 py-3 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg transition-colors duration-200"
-                      title="Ajouter un nouveau type"
-                    >
-                      <Plus className="h-4 w-4" />
-                    </button>
-                  </div>
-
-                  {showAddContentType && (
-                    <div className="mt-2 flex space-x-2">
-                      <input
-                        type="text"
-                        value={newContentType}
-                        onChange={(e) => setNewContentType(e.target.value)}
-                        placeholder="Nouveau type (ex: événement)"
-                        className="flex-1 p-2 border border-gray-300 rounded-lg text-sm"
-                      />
-                      <button
-                        type="button"
-                        onClick={handleAddCustomContentType}
-                        className="px-3 py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700"
-                      >
-                        Ajouter
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => { setShowAddContentType(false); setNewContentType(''); }}
-                        className="px-3 py-2 bg-gray-300 text-gray-700 rounded-lg text-sm hover:bg-gray-400"
-                      >
-                        Annuler
-                      </button>
-                    </div>
-                  )}
+                  <select
+                    value={formData.type}
+                    onChange={(e) => setFormData(p => ({ ...p, type: e.target.value }))}
+                    className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                    required
+                  >
+                    {contentTypes.map(type => (
+                      <option key={type.value} value={type.value}>{type.label}</option>
+                    ))}
+                  </select>
                 </div>
 
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">Titre *</label>
                   <input
                     type="text"
-                    value={newContentData.title}
-                    onChange={(e) => handleInputChange('title', e.target.value)}
+                    value={formData.title}
+                    onChange={(e) => setFormData(p => ({ ...p, title: e.target.value }))}
                     className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
                     placeholder="Titre du contenu"
                     required
@@ -610,136 +554,126 @@ const ContentManagement: React.FC = () => {
                   <div className="border border-gray-300 rounded-lg">
                     <ReactQuill
                       theme="snow"
-                      value={newContentData.description}
-                      onChange={(value) => handleInputChange('description', value)}
+                      value={formData.description}
+                      onChange={(value) => setFormData(p => ({ ...p, description: value }))}
                       modules={quillModules}
                       formats={quillFormats}
-                      placeholder="Description détaillée du contenu avec mise en forme..."
-                      style={{ minHeight: '200px' }}
+                      placeholder="Description détaillée..."
+                      style={{ minHeight: '180px' }}
                     />
                   </div>
-                  <p className="text-sm text-gray-500 mt-1">
-                    Utilisez la barre d'outils pour mettre en forme votre texte (gras, italique, couleurs, listes, etc.)
-                  </p>
                 </div>
 
+                {/* Multi-image Section */}
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Image / Média *</label>
-                  <div className="flex rounded-lg border border-gray-300 overflow-hidden mb-3">
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Photos *
+                    <span className="ml-2 text-xs text-gray-400 font-normal">({images.length} photo{images.length !== 1 ? 's' : ''}) — la 1re sera l'image principale</span>
+                  </label>
+
+                  {/* Drop Zone */}
+                  <div
+                    onDragOver={(e) => { e.preventDefault(); setIsDraggingOver(true); }}
+                    onDragLeave={() => setIsDraggingOver(false)}
+                    onDrop={handleDropZoneDrop}
+                    onClick={() => fileInputRef.current?.click()}
+                    className={`border-2 border-dashed rounded-xl p-6 text-center cursor-pointer transition-all duration-200 ${isDraggingOver ? 'border-blue-500 bg-blue-50' : 'border-gray-300 hover:border-blue-400 hover:bg-blue-50'}`}
+                  >
+                    <ImagePlus className="h-10 w-10 mx-auto mb-2 text-gray-400" />
+                    <p className="text-sm font-medium text-gray-700">Glissez-déposez vos photos ici</p>
+                    <p className="text-xs text-gray-500 mt-1">ou cliquez pour choisir — JPG, PNG, GIF, WebP — max 10 MB chacune</p>
+                    <input ref={fileInputRef} type="file" accept="image/*" multiple onChange={handleFilePick} className="hidden" />
+                  </div>
+
+                  {/* URL Input */}
+                  <div className="flex gap-2 mt-3">
+                    <input
+                      type="url"
+                      value={urlInput}
+                      onChange={(e) => setUrlInput(e.target.value)}
+                      onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), handleAddUrl())}
+                      placeholder="Ou coller une URL d'image..."
+                      className="flex-1 p-2.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500"
+                    />
                     <button
                       type="button"
-                      onClick={() => { setUploadMode('file'); setNewContentData(p => ({ ...p, url: '' })); setFilePreview(null); setSelectedFile(null); }}
-                      className={`flex-1 flex items-center justify-center gap-2 py-2.5 text-sm font-medium transition-colors ${uploadMode === 'file' ? 'bg-blue-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}
-                    >
-                      <Upload className="h-4 w-4" />
-                      Télécharger une image
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => { setUploadMode('url'); setSelectedFile(null); setFilePreview(null); }}
-                      className={`flex-1 flex items-center justify-center gap-2 py-2.5 text-sm font-medium transition-colors ${uploadMode === 'url' ? 'bg-blue-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}
+                      onClick={handleAddUrl}
+                      disabled={!urlInput.trim()}
+                      className="flex items-center gap-1.5 px-4 py-2.5 bg-gray-800 text-white rounded-lg text-sm font-medium hover:bg-gray-700 disabled:opacity-40 disabled:cursor-not-allowed"
                     >
                       <Link className="h-4 w-4" />
-                      Utiliser une URL
+                      Ajouter
                     </button>
                   </div>
 
-                  {uploadMode === 'file' ? (
-                    <div>
-                      <input
-                        ref={fileInputRef}
-                        type="file"
-                        accept="image/*"
-                        onChange={handleFileSelect}
-                        className="hidden"
-                      />
-                      {!selectedFile && !filePreview ? (
-                        <div
-                          onClick={() => fileInputRef.current?.click()}
-                          className="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center cursor-pointer hover:border-blue-400 hover:bg-blue-50 transition-colors"
-                        >
-                          <Upload className="h-10 w-10 mx-auto mb-3 text-gray-400" />
-                          <p className="text-sm font-medium text-gray-700">Cliquez pour sélectionner une image</p>
-                          <p className="text-xs text-gray-500 mt-1">JPG, PNG, GIF, WebP — max 10 MB</p>
-                        </div>
-                      ) : (
-                        <div className="relative rounded-lg overflow-hidden border border-gray-200">
+                  {/* Image Grid */}
+                  {images.length > 0 && (
+                    <div className="mt-4 grid grid-cols-3 gap-3">
+                      {images.map((img, idx) => (
+                        <div key={img.id} className="relative group rounded-lg overflow-hidden bg-gray-100 aspect-square">
                           <img
-                            src={filePreview || newContentData.url}
-                            alt="Aperçu"
-                            className="w-full h-48 object-cover"
+                            src={img.src}
+                            alt=""
+                            className="w-full h-full object-cover"
+                            onError={(e) => { (e.target as HTMLImageElement).src = 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100"><rect width="100" height="100" fill="%23e5e7eb"/><text x="50%" y="50%" text-anchor="middle" dy=".3em" fill="%239ca3af" font-size="12">Erreur</text></svg>'; }}
                           />
-                          <button
-                            type="button"
-                            onClick={() => { setSelectedFile(null); setFilePreview(null); if (fileInputRef.current) fileInputRef.current.value = ''; }}
-                            className="absolute top-2 right-2 bg-white rounded-full p-1 shadow-md hover:bg-red-50"
-                          >
-                            <X className="h-4 w-4 text-red-500" />
-                          </button>
-                          {selectedFile && (
-                            <div className="absolute bottom-0 left-0 right-0 bg-black bg-opacity-50 text-white text-xs p-2 flex items-center justify-between">
-                              <span className="truncate">{selectedFile.name}</span>
-                              <button
-                                type="button"
-                                onClick={() => fileInputRef.current?.click()}
-                                className="ml-2 underline flex-shrink-0"
-                              >
-                                Changer
-                              </button>
+                          {idx === 0 && (
+                            <span className="absolute top-1 left-1 bg-blue-600 text-white text-xs px-1.5 py-0.5 rounded font-semibold">Principal</span>
+                          )}
+                          {img.uploading && (
+                            <div className="absolute inset-0 bg-black bg-opacity-40 flex items-center justify-center">
+                              <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-white"></div>
                             </div>
                           )}
-                        </div>
-                      )}
-                      {isUploading && (
-                        <div className="mt-2">
-                          <div className="flex justify-between text-xs text-gray-600 mb-1">
-                            <span>Téléchargement en cours...</span>
-                            <span>{uploadProgress}%</span>
+                          <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-30 transition-all duration-200">
+                            <div className="absolute top-1 right-1 opacity-0 group-hover:opacity-100 transition-opacity flex gap-1">
+                              <button
+                                type="button"
+                                onClick={(e) => { e.stopPropagation(); removeImage(img.id); }}
+                                className="bg-red-500 hover:bg-red-600 text-white rounded-full p-1 shadow"
+                              >
+                                <X className="h-3.5 w-3.5" />
+                              </button>
+                            </div>
+                            <div className="absolute bottom-1 left-1 right-1 opacity-0 group-hover:opacity-100 transition-opacity flex justify-between gap-1">
+                              <button
+                                type="button"
+                                disabled={idx === 0}
+                                onClick={(e) => { e.stopPropagation(); moveImage(img.id, -1); }}
+                                className="flex-1 bg-white/80 hover:bg-white text-gray-700 rounded text-xs py-0.5 disabled:opacity-30"
+                              >
+                                &larr;
+                              </button>
+                              <button
+                                type="button"
+                                disabled={idx === images.length - 1}
+                                onClick={(e) => { e.stopPropagation(); moveImage(img.id, 1); }}
+                                className="flex-1 bg-white/80 hover:bg-white text-gray-700 rounded text-xs py-0.5 disabled:opacity-30"
+                              >
+                                &rarr;
+                              </button>
+                            </div>
                           </div>
-                          <div className="h-2 bg-gray-200 rounded-full overflow-hidden">
-                            <div
-                              className="h-full bg-blue-500 rounded-full transition-all duration-300"
-                              style={{ width: `${uploadProgress}%` }}
-                            />
-                          </div>
                         </div>
-                      )}
-                    </div>
-                  ) : (
-                    <div>
-                      <input
-                        type="url"
-                        value={newContentData.url}
-                        onChange={(e) => handleInputChange('url', e.target.value)}
-                        className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                        placeholder="https://exemple.com/image.jpg ou lien YouTube/Vimeo"
-                      />
-                      <p className="text-xs text-gray-500 mt-1">
-                        Images: URL directe. Vidéos: lien YouTube ou Vimeo. Articles: lien vers la page.
-                      </p>
+                      ))}
+                      {/* Add More Button */}
+                      <div
+                        onClick={() => fileInputRef.current?.click()}
+                        className="aspect-square rounded-lg border-2 border-dashed border-gray-300 hover:border-blue-400 hover:bg-blue-50 flex flex-col items-center justify-center cursor-pointer transition-all"
+                      >
+                        <Upload className="h-6 w-6 text-gray-400 mb-1" />
+                        <span className="text-xs text-gray-500">Ajouter</span>
+                      </div>
                     </div>
                   )}
                 </div>
-
-                {newContentData.type === 'video' && (
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Miniature (optionnel)</label>
-                    <input
-                      type="url"
-                      value={newContentData.thumbnail}
-                      onChange={(e) => handleInputChange('thumbnail', e.target.value)}
-                      className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                      placeholder="https://exemple.com/miniature.jpg"
-                    />
-                  </div>
-                )}
 
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">Auteur</label>
                   <input
                     type="text"
-                    value={newContentData.author}
-                    onChange={(e) => handleInputChange('author', e.target.value)}
+                    value={formData.author}
+                    onChange={(e) => setFormData(p => ({ ...p, author: e.target.value }))}
                     className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
                     placeholder="Nom de l'auteur (par défaut: Administrateur)"
                   />
@@ -750,20 +684,20 @@ const ContentManagement: React.FC = () => {
                     type="button"
                     onClick={resetModal}
                     className="px-6 py-3 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50"
-                    disabled={isSubmitting || isUploading}
+                    disabled={isSubmitting}
                   >
                     Annuler
                   </button>
                   <button
                     type="submit"
-                    disabled={isSubmitting || isUploading}
+                    disabled={isSubmitting}
                     className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-blue-400"
                   >
-                    {isSubmitting || isUploading ? (
-                      <div className="flex items-center space-x-2">
-                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-                        <span>{isUploading ? 'Téléchargement...' : editingContent ? 'Modification...' : 'Création...'}</span>
-                      </div>
+                    {isSubmitting ? (
+                      <span className="flex items-center gap-2">
+                        <span className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></span>
+                        Enregistrement...
+                      </span>
                     ) : (
                       editingContent ? 'Modifier le contenu' : 'Créer le contenu'
                     )}
@@ -775,30 +709,38 @@ const ContentManagement: React.FC = () => {
         </div>
       )}
 
+      {/* Detail Modal */}
       {selectedContent && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-2xl max-w-4xl w-full max-h-[90vh] overflow-y-auto">
             <div className="p-6">
               <div className="flex justify-between items-center mb-6">
                 <h2 className="text-2xl font-bold text-gray-900">Détails du Contenu</h2>
-                <button
-                  onClick={() => setSelectedContent(null)}
-                  className="text-gray-500 hover:text-gray-700 text-2xl"
-                >
-                  ×
-                </button>
+                <button onClick={() => setSelectedContent(null)} className="text-gray-400 hover:text-gray-600 p-1"><X className="h-6 w-6" /></button>
               </div>
-
               <div className="space-y-6">
+                {/* Images Gallery */}
+                {(() => {
+                  const allImgs = selectedContent.images && selectedContent.images.length > 0
+                    ? selectedContent.images
+                    : (selectedContent.thumbnail || selectedContent.url ? [selectedContent.thumbnail || selectedContent.url] : []);
+                  return allImgs.length > 0 ? (
+                    <div className={`grid gap-2 ${allImgs.length === 1 ? 'grid-cols-1' : allImgs.length === 2 ? 'grid-cols-2' : 'grid-cols-3'}`}>
+                      {allImgs.map((src, i) => (
+                        <img key={i} src={src} alt={`Photo ${i + 1}`} className="w-full h-40 object-cover rounded-xl" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+                      ))}
+                    </div>
+                  ) : null;
+                })()}
+
                 <div className="bg-gray-50 p-4 rounded-lg">
                   <h3 className="text-lg font-semibold mb-2">{selectedContent.title}</h3>
                   <div className="text-gray-600 mb-4" dangerouslySetInnerHTML={{ __html: selectedContent.description }} />
-
                   <div className="grid grid-cols-2 gap-4 text-sm">
-                    <div><strong>Type:</strong> {selectedContent.type}</div>
+                    <div><strong>Type:</strong> {getTypeLabel(selectedContent.type)}</div>
                     <div><strong>Auteur:</strong> {selectedContent.author}</div>
                     <div><strong>Date:</strong> {new Date(selectedContent.date).toLocaleDateString('fr-FR')}</div>
-                    <div><strong>URL:</strong> <a href={selectedContent.url} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">Voir le contenu</a></div>
+                    <div><strong>Photos:</strong> {(selectedContent.images?.length || 0) || 1}</div>
                   </div>
                 </div>
 
@@ -823,7 +765,7 @@ const ContentManagement: React.FC = () => {
                 {(selectedContent.comments || []).length > 0 && (
                   <div>
                     <h4 className="text-lg font-semibold mb-4">Commentaires récents</h4>
-                    <div className="space-y-3 max-h-64 overflow-y-auto">
+                    <div className="space-y-3 max-h-48 overflow-y-auto">
                       {(selectedContent.comments || []).slice(0, 5).map((comment) => (
                         <div key={comment.id} className="bg-gray-50 p-3 rounded-lg">
                           <div className="flex justify-between items-center mb-1">
@@ -837,14 +779,8 @@ const ContentManagement: React.FC = () => {
                   </div>
                 )}
               </div>
-
               <div className="flex justify-end mt-6">
-                <button
-                  onClick={() => setSelectedContent(null)}
-                  className="px-6 py-3 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50"
-                >
-                  Fermer
-                </button>
+                <button onClick={() => setSelectedContent(null)} className="px-6 py-3 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50">Fermer</button>
               </div>
             </div>
           </div>

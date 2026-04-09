@@ -1,9 +1,10 @@
 import React, { useState } from 'react';
-import { Plus, CreditCard as Edit, Trash2, Users, Calendar, MessageSquare, BookOpen, Settings, BarChart3, Bell, FileText, Lock, Image } from 'lucide-react';
+import { Plus, CreditCard as Edit, Trash2, Users, Calendar, MessageSquare, BookOpen, Settings, BarChart3, Bell, FileText, Lock, Image, GraduationCap } from 'lucide-react';
 import DynamicFormBuilder from './DynamicFormBuilder';
 import { useAuth } from './AuthGuard';
 import FirebaseDiagnostics from './FirebaseDiagnostics';
 import ContentManagement from './ContentManagement';
+import StudentsDirectory from './StudentsDirectory';
 import { createEvent } from '../lib/firebase';
 import type { Event as FirebaseEvent } from '../lib/firebase';
 
@@ -132,6 +133,7 @@ const BackOffice: React.FC = () => {
     { id: 'forums', label: 'Forums', icon: MessageSquare },
     { id: 'classes', label: 'Classes', icon: BookOpen },
     ...(isAdmin() ? [
+      { id: 'students-directory', label: 'Étudiants', icon: GraduationCap },
       { id: 'users', label: 'Utilisateurs', icon: Users },
       { id: 'notifications', label: 'Notifications', icon: Bell },
       { id: 'settings', label: 'Paramètres', icon: Settings }
@@ -639,7 +641,7 @@ const BackOffice: React.FC = () => {
           {activeTab === 'dashboard' && renderDashboard()}
           {activeTab === 'forms' && <DynamicFormBuilder />}
           {activeTab === 'content' && <ContentManagement />}
-          {(activeTab === 'students' || activeTab === 'users') && <StudentManagement />}
+          {activeTab === 'students-directory' && <StudentsDirectory />}
           {(activeTab === 'events' || activeTab === 'conferences' || activeTab === 'forums' || activeTab === 'classes') && renderEventsList()}
           {activeTab === 'users' && (
             <div className="bg-white p-6 rounded-xl shadow-md">
