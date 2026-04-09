@@ -10,6 +10,28 @@ const FALLBACK_SITE_URL = "https://www.istm-kinshasa.ac.cd";
 const SITE_NAME = "ISTM Kinshasa - Institut Supérieur des Techniques Médicales";
 const SITE_DESCRIPTION = "Institut Supérieur des Techniques Médicales de Kinshasa - Formation médicale d'excellence";
 
+const SOCIAL_BOT_PATTERNS = [
+  "facebookexternalhit",
+  "facebot",
+  "twitterbot",
+  "whatsapp",
+  "telegrambot",
+  "linkedinbot",
+  "slackbot",
+  "discordbot",
+  "googlebot",
+  "bingbot",
+  "applebot",
+  "ia_archiver",
+  "embedly",
+  "pinterest",
+];
+
+function isSocialBot(userAgent: string): boolean {
+  const ua = userAgent.toLowerCase();
+  return SOCIAL_BOT_PATTERNS.some((pattern) => ua.includes(pattern));
+}
+
 Deno.serve(async (req: Request) => {
   try {
     if (req.method === "OPTIONS") {
@@ -19,14 +41,25 @@ Deno.serve(async (req: Request) => {
     const url = new URL(req.url);
     const contentId = url.searchParams.get("contenu");
     const appUrl = url.searchParams.get("app_url") || FALLBACK_SITE_URL;
+    const userAgent = req.headers.get("user-agent") || "";
 
     const siteUrl = appUrl.replace(/\/$/, "");
-    const defaultImage = `${siteUrl}/image.png`;
+    const targetUrl = `${siteUrl}/?contenu=${contentId}`;
 
     if (!contentId) {
       return new Response(null, {
         status: 302,
         headers: { ...corsHeaders, Location: siteUrl },
+      });
+    }
+
+    if (!isSocialBot(userAgent)) {
+      return new Response(null, {
+        status: 302,
+        headers: {
+          ...corsHeaders,
+          Location: targetUrl,
+        },
       });
     }
 
@@ -42,7 +75,7 @@ Deno.serve(async (req: Request) => {
 
     const shareParams = new URLSearchParams({ contenu: contentId, app_url: appUrl });
     const canonicalUrl = `${Deno.env.get("SUPABASE_URL")}/functions/v1/og-preview?${shareParams.toString()}`;
-    const targetUrl = `${siteUrl}/?contenu=${contentId}`;
+    const defaultImage = `${siteUrl}/image.png`;
 
     let title = SITE_NAME;
     let description = SITE_DESCRIPTION;
@@ -85,12 +118,9 @@ Deno.serve(async (req: Request) => {
   <meta name="twitter:title" content="${escaped(title)}" />
   <meta name="twitter:description" content="${escaped(description)}" />
   <meta name="twitter:image" content="${escaped(image)}" />
-
-  <meta http-equiv="refresh" content="0; url=${escaped(targetUrl)}" />
-  <script>window.location.replace(${JSON.stringify(targetUrl)});</script>
 </head>
 <body>
-  <p>Redirection en cours... <a href="${escaped(targetUrl)}">Cliquez ici</a></p>
+  <p><a href="${escaped(targetUrl)}">${escaped(title)}</a></p>
 </body>
 </html>`;
 
@@ -99,7 +129,7 @@ Deno.serve(async (req: Request) => {
       headers: {
         ...corsHeaders,
         "Content-Type": "text/html; charset=utf-8",
-        "Cache-Control": "public, max-age=60",
+        "Cache-Control": "public, max-age=300",
       },
     });
   } catch (err) {

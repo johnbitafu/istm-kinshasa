@@ -9,6 +9,7 @@ import StudentLoginModal from './StudentLoginModal';
 
 interface ContentSectionProps {
   selectedContentId?: string | null;
+  onContentIdConsumed?: () => void;
 }
 
 interface ContentType {
@@ -16,7 +17,7 @@ interface ContentType {
   label: string;
 }
 
-const ContentSection: React.FC<ContentSectionProps> = ({ selectedContentId }) => {
+const ContentSection: React.FC<ContentSectionProps> = ({ selectedContentId, onContentIdConsumed }) => {
   const [activeFilter, setActiveFilter] = useState('all');
   const [selectedContent, setSelectedContent] = useState<ContentItem | null>(null);
   const [newComment, setNewComment] = useState('');
@@ -97,13 +98,27 @@ const ContentSection: React.FC<ContentSectionProps> = ({ selectedContentId }) =>
   }, [selectedContent?.id]);
 
   useEffect(() => {
-    if (selectedContentId && contentItems.length > 0) {
-      const content = contentItems.find(item => item.id === selectedContentId);
-      if (content) {
-        setSelectedContent(content);
-      }
+    if (!selectedContentId) return;
+
+    const found = contentItems.find(item => item.id === selectedContentId);
+    if (found) {
+      setSelectedContent(found);
+      onContentIdConsumed?.();
+      return;
     }
-  }, [selectedContentId, contentItems]);
+
+    supabase
+      .from('content_items')
+      .select('*')
+      .eq('id', selectedContentId)
+      .maybeSingle()
+      .then(({ data }) => {
+        if (data) {
+          setSelectedContent(data as ContentItem);
+          onContentIdConsumed?.();
+        }
+      });
+  }, [selectedContentId]);
 
   const filterOptions = [
     { id: 'all', label: 'Tout' },

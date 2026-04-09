@@ -34,6 +34,12 @@ function AppContent() {
   }, []);
 
   useEffect(() => {
+    if (activeSection !== 'contenu') {
+      setSelectedContentId(null);
+    }
+  }, [activeSection]);
+
+  useEffect(() => {
     if (user && isStudent() && activeSection === 'backoffice') {
       setActiveSection('accueil');
     }
@@ -62,7 +68,7 @@ function AppContent() {
       case 'migration':
         return <DataMigration />;
       case 'contenu':
-        return <ContentSection selectedContentId={selectedContentId} />;
+        return <ContentSection selectedContentId={selectedContentId} onContentIdConsumed={() => setSelectedContentId(null)} />;
       case 'forum':
         return <ForumSection />;
       case 'inscription':
