@@ -103,12 +103,11 @@ export interface Comment {
 
 export interface ContentItem {
   id: string;
-  type: 'image' | 'video' | 'article' | 'communique' | 'annonce' | 'actualite' | string;
+  type: 'image' | 'video' | 'article' | 'communique' | 'annonce' | 'actualite';
   title: string;
   description: string;
   url: string;
   thumbnail?: string;
-  images?: string[];
   author: string;
   date: string;
   likes: number;

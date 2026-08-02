@@ -1,128 +1,106 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { Play, FileText, MessageCircle, Heart, Eye, Calendar, X, Send, ArrowLeft, Share2, Bookmark, CreditCard as Edit3, ChevronLeft, ChevronRight, Images } from 'lucide-react';
-import { supabase, getContentItems, addCommentToContentItem, updateContentItem } from '../lib/supabase';
-import type { ContentItem, Comment } from '../lib/supabase';
+import React, { useState, useEffect } from 'react';
+import { Play, FileText, MessageCircle, Heart, Eye, Calendar, X, Send, ArrowLeft, Share2, Bookmark, Edit3 } from 'lucide-react';
+import { collection, getDocs, query, where, addDoc, updateDoc, doc, Timestamp } from 'firebase/firestore';
+import { db } from '../lib/firebase';
+import type { DocumentSnapshot } from 'firebase/firestore';
 import { useAuth } from './AuthGuard';
-import ShareModal from './ShareModal';
-import StudentLoginModal from './StudentLoginModal';
 
+interface Comment {
+  id?: string;
+  author: string;
+  content: string;
+  date: string;
+}
+
+interface ContentItem {
+  id: string;
+  type: 'video' | 'article' | 'document';
+  title: string;
+  description: string;
+  url: string;
+  thumbnail?: string;
+  author: string;
+  date: string;
+  likes: number;
+  views: number;
+  comments: Comment[];
+}
 
 interface ContentSectionProps {
   selectedContentId?: string | null;
-  onContentIdConsumed?: () => void;
 }
 
-interface ContentType {
-  value: string;
-  label: string;
-}
-
-const ContentSection: React.FC<ContentSectionProps> = ({ selectedContentId, onContentIdConsumed }) => {
+const ContentSection: React.FC<ContentSectionProps> = ({ selectedContentId }) => {
   const [activeFilter, setActiveFilter] = useState('all');
   const [selectedContent, setSelectedContent] = useState<ContentItem | null>(null);
   const [newComment, setNewComment] = useState('');
   const [loading, setLoading] = useState(false);
   const [contentItems, setContentItems] = useState<ContentItem[]>([]);
-  const [contentTypes, setContentTypes] = useState<ContentType[]>([]);
   const [error, setError] = useState<string | null>(null);
-  const [lastDoc, setLastDoc] = useState<string | undefined>();
+  const [lastDoc, setLastDoc] = useState<DocumentSnapshot | undefined>();
   const [hasMore, setHasMore] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [commentTab, setCommentTab] = useState<'view' | 'write'>('view');
-  const [sharingContent, setSharingContent] = useState<ContentItem | null>(null);
-  const [cardSlides, setCardSlides] = useState<Record<string, number>>({});
-  const [modalSlide, setModalSlide] = useState(0);
-  const [showLoginModal, setShowLoginModal] = useState(false);
-  const [pendingLikeItem, setPendingLikeItem] = useState<ContentItem | null>(null);
-  const [likedItems, setLikedItems] = useState<Set<string>>(() => {
-    try {
-      const stored = localStorage.getItem('istm_liked_items');
-      return stored ? new Set(JSON.parse(stored)) : new Set();
-    } catch {
-      return new Set();
-    }
-  });
 
-  const ITEMS_PER_PAGE = 9;
+  const ITEMS_PER_PAGE = 9; // 3x3 grid
 
   const { user, isStudent } = useAuth();
 
   const loadContentItems = async (loadMore: boolean = false) => {
     try {
-      if (loadMore) {
-        setLoadingMore(true);
-      } else {
-        setLoading(true);
-      }
+      setLoading(true);
       setError(null);
-      console.log('🔍 Chargement du contenu depuis Supabase...');
+      console.log('🔍 Chargement du contenu depuis Firebase...');
 
-      const result = await getContentItems(ITEMS_PER_PAGE, loadMore ? lastDoc : undefined);
+      const contentRef = collection(db, 'content_items');
+      const snapshot = await getDocs(contentRef);
 
-      if (loadMore) {
-        setContentItems(prev => [...prev, ...result.items]);
-      } else {
-        setContentItems(result.items);
-      }
+      const items: ContentItem[] = snapshot.docs.map(doc => {
+        const data = doc.data();
+        return {
+          id: doc.id,
+          type: data.type || 'article',
+          title: data.title || '',
+          description: data.description || '',
+          url: data.url || '',
+          thumbnail: data.thumbnail || null,
+          author: data.author || 'Anonyme',
+          date: data.date || new Date().toISOString().split('T')[0],
+          likes: data.likes || 0,
+          views: data.views || 0,
+          comments: data.comments || []
+        };
+      });
 
-      setLastDoc(result.lastDoc);
-      setHasMore(result.hasMore);
-
-      console.log(`✅ ${result.items.length} élément(s) de contenu chargé(s)`);
+      setContentItems(items);
+      console.log(`✅ ${items.length} élément(s) de contenu chargé(s)`);
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Erreur inconnue';
       setError(errorMessage);
       console.error('❌ Erreur lors du chargement du contenu:', err);
     } finally {
       setLoading(false);
-      setLoadingMore(false);
     }
-  };
-
-  const loadContentTypes = async () => {
-    const { data } = await supabase
-      .from('content_types')
-      .select('value, label')
-      .order('is_base', { ascending: false })
-      .order('label', { ascending: true });
-    if (data) setContentTypes(data as ContentType[]);
   };
 
   useEffect(() => {
     loadContentItems();
-    loadContentTypes();
   }, []);
 
   useEffect(() => {
-    setModalSlide(0);
-  }, [selectedContent?.id]);
-
-  useEffect(() => {
-    if (!selectedContentId) return;
-
-    const found = contentItems.find(item => item.id === selectedContentId);
-    if (found) {
-      setSelectedContent(found);
-      onContentIdConsumed?.();
-      return;
+    if (selectedContentId && contentItems.length > 0) {
+      const content = contentItems.find(item => item.id === selectedContentId);
+      if (content) {
+        setSelectedContent(content);
+      }
     }
-
-    supabase
-      .from('content_items')
-      .select('*')
-      .eq('id', selectedContentId)
-      .maybeSingle()
-      .then(({ data }) => {
-        if (data) {
-          setSelectedContent(data as ContentItem);
-          onContentIdConsumed?.();
-        }
-      });
-  }, [selectedContentId]);
+  }, [selectedContentId, contentItems]);
 
   const filterOptions = [
     { id: 'all', label: 'Tout' },
-    ...contentTypes.map(t => ({ id: t.value, label: t.label }))
+    { id: 'image', label: 'Images' },
+    { id: 'video', label: 'Vidéos' },
+    { id: 'article', label: 'Articles' }
   ];
 
   const filteredContent = activeFilter === 'all' 
@@ -140,95 +118,64 @@ const ContentSection: React.FC<ContentSectionProps> = ({ selectedContentId, onCo
     }
   };
 
-  const getItemImages = (item: ContentItem): string[] => {
-    if (item.images && item.images.length > 0) return item.images;
-    const fallback = item.thumbnail || item.url;
-    return fallback ? [fallback] : [];
-  };
-
-  const cardSlide = (itemId: string) => cardSlides[itemId] || 0;
-
-  const setCardSlide = (itemId: string, idx: number) => {
-    setCardSlides(prev => ({ ...prev, [itemId]: idx }));
-  };
-
   const handleAddComment = async (contentId: string) => {
     if (newComment.trim() && selectedContent) {
       if (!user || !isStudent()) {
-        setShowLoginModal(true);
+        alert('Vous devez être connecté en tant qu\'étudiant pour commenter');
         return;
       }
 
       try {
         console.log('💬 Ajout d\'un commentaire...');
 
-        const comment: Partial<Comment> = {
-          author: user.name,
-          content: newComment
+        const contentRef = doc(db, 'content_items', contentId);
+        const comment: Comment = {
+          author: `${user.name} (${user.matricule})`,
+          content: newComment,
+          date: new Date().toISOString()
         };
 
-        await addCommentToContentItem(contentId, comment);
+        const updatedComments = [...(selectedContent.comments || []), comment];
+        await updateDoc(contentRef, {
+          comments: updatedComments
+        });
+
+        setSelectedContent({ ...selectedContent, comments: updatedComments });
 
         // Recharger le contenu pour obtenir les derniers commentaires
         await loadContentItems();
-
-        // Mettre à jour le contenu sélectionné
-        const updatedContent = contentItems.find(item => item.id === contentId);
-        if (updatedContent) {
-          setSelectedContent(updatedContent);
-        }
-
         console.log('✅ Commentaire ajouté avec succès');
       } catch (error) {
         console.error('❌ Erreur lors de l\'ajout du commentaire:', error);
         alert('Erreur lors de l\'ajout du commentaire');
       }
-
+      
       setNewComment('');
     }
   };
 
-  const doLike = async (item: ContentItem) => {
-    const alreadyLiked = likedItems.has(item.id);
-    const newLikes = alreadyLiked ? Math.max(0, item.likes - 1) : item.likes + 1;
-
-    const newLikedItems = new Set(likedItems);
-    if (alreadyLiked) {
-      newLikedItems.delete(item.id);
-    } else {
-      newLikedItems.add(item.id);
-    }
-
-    setLikedItems(newLikedItems);
-    localStorage.setItem('istm_liked_items', JSON.stringify([...newLikedItems]));
+  const handleLike = async (e: React.MouseEvent, item: ContentItem) => {
+    e.stopPropagation();
 
     try {
-      await updateContentItem(item.id, { likes: newLikes });
-      setContentItems(prev =>
-        prev.map(contentItem =>
-          contentItem.id === item.id
+      console.log('❤️ Ajout d\'un like...');
+      const contentRef = doc(db, 'content_items', item.id);
+      const newLikes = item.likes + 1;
+
+      await updateDoc(contentRef, { likes: newLikes });
+
+      setContentItems(prev => 
+        prev.map(contentItem => 
+          contentItem.id === item.id 
             ? { ...contentItem, likes: newLikes }
             : contentItem
         )
       );
-      if (selectedContent && selectedContent.id === item.id) {
-        setSelectedContent({ ...selectedContent, likes: newLikes });
-      }
+      
+      console.log('✅ Like ajouté avec succès');
     } catch (error) {
-      console.error('❌ Erreur lors du like:', error);
-      setLikedItems(likedItems);
-      localStorage.setItem('istm_liked_items', JSON.stringify([...likedItems]));
+      console.error('❌ Erreur lors de l\'ajout du like:', error);
     }
-  };
-
-  const handleLike = (e: React.MouseEvent, item: ContentItem) => {
-    e.stopPropagation();
-    if (!user || !isStudent()) {
-      setPendingLikeItem(item);
-      setShowLoginModal(true);
-      return;
-    }
-    doLike(item);
   };
 
   const handleViewContent = async (item: ContentItem) => {
@@ -314,53 +261,21 @@ const ContentSection: React.FC<ContentSectionProps> = ({ selectedContentId, onCo
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
               {filteredContent.map((item) => {
                 const IconComponent = getContentIcon(item.type);
-                const imgs = getItemImages(item);
-                const currentSlide = cardSlide(item.id);
                 return (
-                  <div
+                  <div 
                     key={item.id}
                     className="bg-white rounded-xl shadow-md hover:shadow-xl transition-all duration-300 transform hover:-translate-y-2 cursor-pointer"
                     onClick={() => handleViewContent(item)}
                   >
-                    <div className="relative h-48 overflow-hidden rounded-t-xl bg-gradient-to-br from-gray-100 to-gray-200">
-                      {imgs.length > 0 ? (
-                        <img
-                          src={imgs[currentSlide] || imgs[0]}
-                          alt={item.title}
-                          className="w-full h-48 object-cover rounded-t-xl"
-                          onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
-                        />
-                      ) : null}
+                    <div className="relative">
+                      <img 
+                        src={item.thumbnail || item.url}
+                        alt={item.title}
+                        className="w-full h-48 object-cover rounded-t-xl"
+                      />
                       <div className="absolute top-4 right-4 bg-blue-600 text-white p-2 rounded-full">
                         <IconComponent className="h-4 w-4" />
                       </div>
-                      {imgs.length > 1 && (
-                        <>
-                          <button
-                            className="absolute left-2 top-1/2 -translate-y-1/2 bg-black/40 hover:bg-black/60 text-white rounded-full p-1 transition-colors"
-                            onClick={(e) => { e.stopPropagation(); setCardSlide(item.id, (currentSlide - 1 + imgs.length) % imgs.length); }}
-                          >
-                            <ChevronLeft className="h-4 w-4" />
-                          </button>
-                          <button
-                            className="absolute right-12 top-1/2 -translate-y-1/2 bg-black/40 hover:bg-black/60 text-white rounded-full p-1 transition-colors"
-                            onClick={(e) => { e.stopPropagation(); setCardSlide(item.id, (currentSlide + 1) % imgs.length); }}
-                          >
-                            <ChevronRight className="h-4 w-4" />
-                          </button>
-                          <div className="absolute bottom-2 left-1/2 -translate-x-1/2 flex gap-1">
-                            {imgs.map((_, i) => (
-                              <span
-                                key={i}
-                                className={`w-1.5 h-1.5 rounded-full transition-colors ${i === currentSlide ? 'bg-white' : 'bg-white/50'}`}
-                              />
-                            ))}
-                          </div>
-                          <span className="absolute bottom-2 right-2 bg-black/50 text-white text-xs px-1.5 py-0.5 rounded-full flex items-center gap-1">
-                            <Images className="h-3 w-3" />{imgs.length}
-                          </span>
-                        </>
-                      )}
                     </div>
                     
                     <div className="p-6">
@@ -382,11 +297,11 @@ const ContentSection: React.FC<ContentSectionProps> = ({ selectedContentId, onCo
 
                       <div className="flex items-center justify-between pt-4 border-t border-gray-100">
                         <div className="flex items-center space-x-4 text-gray-500">
-                          <button
+                          <button 
                             onClick={(e) => handleLike(e, item)}
-                            className={`flex items-center transition-colors duration-200 ${likedItems.has(item.id) ? 'text-red-500' : 'hover:text-red-400'}`}
+                            className="flex items-center hover:text-red-500 transition-colors duration-200 group"
                           >
-                            <Heart className={`h-4 w-4 mr-1 transition-all duration-200 ${likedItems.has(item.id) ? 'fill-current' : ''}`} />
+                            <Heart className="h-4 w-4 mr-1 group-hover:fill-current" />
                             {item.likes}
                           </button>
                           <span className="flex items-center">
@@ -439,52 +354,25 @@ const ContentSection: React.FC<ContentSectionProps> = ({ selectedContentId, onCo
                 <div className="bg-gradient-to-r from-blue-600 to-green-600 text-white p-4 md:p-6 text-center">
                   <h2 className="text-xl md:text-3xl font-bold">📰 Détail de l'Actualité</h2>
                 </div>
-                {/* Header avec carousel de photos */}
-                {(() => {
-                  const modalImgs = getItemImages(selectedContent);
-                  const safe = Math.min(modalSlide, Math.max(0, modalImgs.length - 1));
-                  return (
-                    <div className="relative h-64 md:h-80 overflow-hidden">
-                      <div className="absolute inset-0 bg-gradient-to-br from-blue-700 to-green-600" />
-                      {modalImgs.length > 0 && (
-                        <img
-                          key={safe}
-                          src={modalImgs[safe]}
-                          alt={selectedContent.title}
-                          className="absolute inset-0 w-full h-full object-cover"
-                          onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
-                        />
-                      )}
-                      <div className="absolute inset-0 bg-black bg-opacity-50" />
-
-                      {modalImgs.length > 1 && (
-                        <>
-                          <button
-                            onClick={() => setModalSlide((safe - 1 + modalImgs.length) % modalImgs.length)}
-                            className="absolute left-3 top-1/2 -translate-y-1/2 z-20 bg-black/40 hover:bg-black/60 text-white rounded-full p-2"
-                          >
-                            <ChevronLeft className="h-5 w-5" />
-                          </button>
-                          <button
-                            onClick={() => setModalSlide((safe + 1) % modalImgs.length)}
-                            className="absolute right-3 top-1/2 -translate-y-1/2 z-20 bg-black/40 hover:bg-black/60 text-white rounded-full p-2"
-                          >
-                            <ChevronRight className="h-5 w-5" />
-                          </button>
-                          <div className="absolute bottom-14 left-1/2 -translate-x-1/2 z-20 flex gap-1.5">
-                            {modalImgs.map((_, i) => (
-                              <button
-                                key={i}
-                                onClick={() => setModalSlide(i)}
-                                className={`w-2 h-2 rounded-full transition-all ${i === safe ? 'bg-white scale-125' : 'bg-white/50'}`}
-                              />
-                            ))}
-                          </div>
-                          <span className="absolute bottom-14 right-3 z-20 bg-black/50 text-white text-xs px-2 py-1 rounded-full">
-                            {safe + 1} / {modalImgs.length}
-                          </span>
-                        </>
-                      )}
+                {/* Header avec image de fond */}
+                <div className="relative h-64 md:h-80 overflow-hidden">
+                {/* Background Image - Affiche toujours l'image */}
+                <div className="absolute inset-0">
+                  <img
+                    src={selectedContent.thumbnail || selectedContent.url}
+                    alt={selectedContent.title}
+                    className="w-full h-full object-cover"
+                    onError={(e) => {
+                      const target = e.target as HTMLImageElement;
+                      target.style.display = 'none';
+                      const parent = target.parentElement;
+                      if (parent) {
+                        parent.innerHTML = '<div class="w-full h-full bg-gradient-to-br from-purple-500 via-blue-500 to-green-500"></div>';
+                      }
+                    }}
+                  />
+                  <div className="absolute inset-0 bg-black bg-opacity-50"></div>
+                </div>
 
                   {/* Header Controls */}
                   <div className="absolute top-0 left-0 right-0 p-3 md:p-6 flex justify-between items-start z-10">
@@ -555,9 +443,7 @@ const ContentSection: React.FC<ContentSectionProps> = ({ selectedContentId, onCo
                       </div>
                     </div>
                   </div>
-                    </div>
-                  );
-                })()}
+                </div>
 
                 {/* Content Body */}
                 <div className="p-4 md:p-8 lg:p-12">
@@ -570,9 +456,9 @@ const ContentSection: React.FC<ContentSectionProps> = ({ selectedContentId, onCo
                             e.stopPropagation();
                             handleLike(e, selectedContent);
                           }}
-                          className={`flex items-center space-x-1 md:space-x-2 px-3 py-1.5 md:px-4 md:py-2 rounded-full transition-colors duration-200 text-sm md:text-base ${likedItems.has(selectedContent.id) ? 'bg-red-500 text-white hover:bg-red-600' : 'bg-red-50 text-red-600 hover:bg-red-100'}`}
+                          className="flex items-center space-x-1 md:space-x-2 px-3 py-1.5 md:px-4 md:py-2 rounded-full bg-red-50 text-red-600 hover:bg-red-100 transition-colors duration-200 text-sm md:text-base"
                         >
-                          <Heart className={`h-4 w-4 md:h-5 md:w-5 ${likedItems.has(selectedContent.id) ? 'fill-current' : ''}`} />
+                          <Heart className="h-4 w-4 md:h-5 md:w-5" />
                           <span className="font-medium">{selectedContent.likes}</span>
                         </button>
                         <button className="flex items-center space-x-1 md:space-x-2 px-3 py-1.5 md:px-4 md:py-2 rounded-full bg-blue-50 text-blue-600 hover:bg-blue-100 transition-colors duration-200 text-sm md:text-base">
@@ -580,13 +466,6 @@ const ContentSection: React.FC<ContentSectionProps> = ({ selectedContentId, onCo
                           <span className="font-medium">{selectedContent.comments.length}</span>
                         </button>
                       </div>
-                      <button
-                        onClick={() => setSharingContent(selectedContent)}
-                        className="flex items-center space-x-1 md:space-x-2 px-3 py-1.5 md:px-4 md:py-2 rounded-full bg-gray-100 text-gray-700 hover:bg-blue-50 hover:text-blue-600 transition-colors duration-200 text-sm md:text-base"
-                      >
-                        <Share2 className="h-4 w-4 md:h-5 md:w-5" />
-                        <span className="font-medium hidden md:inline">Partager</span>
-                      </button>
                     </div>
 
                     {/* Content Description */}
@@ -618,13 +497,7 @@ const ContentSection: React.FC<ContentSectionProps> = ({ selectedContentId, onCo
                             <span className="hidden md:inline">Voir</span>
                           </button>
                           <button
-                            onClick={() => {
-                              if (!user || !isStudent()) {
-                                setShowLoginModal(true);
-                              } else {
-                                setCommentTab('write');
-                              }
-                            }}
+                            onClick={() => setCommentTab('write')}
                             className={`flex items-center space-x-2 px-3 py-2 md:px-4 md:py-2 rounded-lg transition-all duration-200 text-sm md:text-base ${
                               commentTab === 'write'
                                 ? 'bg-gradient-to-r from-blue-600 to-green-600 text-white shadow-md'
@@ -713,28 +586,6 @@ const ContentSection: React.FC<ContentSectionProps> = ({ selectedContentId, onCo
           </div>
         )}
       </div>
-
-      {sharingContent && (
-        <ShareModal
-          contentId={sharingContent.id}
-          title={sharingContent.title}
-          description={sharingContent.description}
-          thumbnail={sharingContent.thumbnail || sharingContent.url}
-          onClose={() => setSharingContent(null)}
-        />
-      )}
-
-      {showLoginModal && (
-        <StudentLoginModal
-          onClose={() => { setShowLoginModal(false); setPendingLikeItem(null); }}
-          onSuccess={() => {
-            if (pendingLikeItem) {
-              doLike(pendingLikeItem);
-              setPendingLikeItem(null);
-            }
-          }}
-        />
-      )}
     </section>
   );
 };

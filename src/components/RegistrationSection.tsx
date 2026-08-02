@@ -520,7 +520,44 @@ const generatePDF = () => {
     generateStudentPDF(studentData);
   }
 };
-  
+
+  // Une fois les conditions d'inscription consultées, on affiche le portail
+  // d'inscription externe directement dans la page, sans la quitter.
+  if (!showConditionsModal) {
+    const registrationUrl = 'https://joberform.space/portail/institut-superieur-des-techniques-medicales-de-kin-mri54k3j';
+    return (
+      <section className="py-12 bg-gray-50 min-h-screen">
+        <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
+            <div>
+              <h2 className="text-2xl md:text-3xl font-bold text-gray-900">
+                Formulaire d'Inscription ISTM Kinshasa
+              </h2>
+              <p className="text-gray-600 mt-1">
+                Remplissez le formulaire ci-dessous pour finaliser votre inscription.
+              </p>
+            </div>
+            <button
+              onClick={() => setShowConditionsModal(true)}
+              className="text-sm font-medium text-blue-600 hover:text-blue-800 underline self-start sm:self-auto"
+            >
+              Revoir les étapes et conditions d'inscription
+            </button>
+          </div>
+
+          <div className="bg-white rounded-2xl shadow-xl overflow-hidden" style={{ height: '80vh' }}>
+            <iframe
+              src={registrationUrl}
+              title="Formulaire d'inscription ISTM Kinshasa"
+              className="w-full h-full border-0"
+              allow="fullscreen"
+            />
+          </div>
+        </div>
+      </section>
+    );
+  }
+
   if (loading) {
     return <div className="flex justify-center items-center h-64">
       <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>

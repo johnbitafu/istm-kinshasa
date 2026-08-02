@@ -12,7 +12,7 @@ import {
   getDoc,
   Timestamp
 } from 'firebase/firestore';
-import { db as firebaseDb, ensureAuth } from './firebase';
+import { db as firebaseDb } from './firebase';
 import { supabase } from './supabase';
 import type { DynamicForm, FormSubmission } from './supabase';
 
@@ -35,7 +35,6 @@ export const getForms = async (): Promise<DynamicForm[]> => {
 
   if (currentDataSource === 'firebase') {
     try {
-      await ensureAuth();
       const formsRef = collection(firebaseDb, 'forms');
       const snapshot = await getDocs(formsRef);
 
@@ -78,7 +77,6 @@ export const getSubmissions = async (formId?: string): Promise<FormSubmission[]>
 
   if (currentDataSource === 'firebase') {
     try {
-      await ensureAuth();
       const submissionsRef = collection(firebaseDb, 'form_submissions');
       let q;
 
@@ -147,7 +145,6 @@ export const createForm = async (formData: Omit<DynamicForm, 'id'>): Promise<str
 
   if (currentDataSource === 'firebase') {
     try {
-      await ensureAuth();
       const formsRef = collection(firebaseDb, 'forms');
       const docRef = await addDoc(formsRef, {
         ...formData,
@@ -180,7 +177,6 @@ export const updateForm = async (formId: string, updates: Partial<DynamicForm>):
 
   if (currentDataSource === 'firebase') {
     try {
-      await ensureAuth();
       const formRef = doc(firebaseDb, 'forms', formId);
       await updateDoc(formRef, {
         ...updates,
@@ -211,7 +207,6 @@ export const deleteForm = async (formId: string): Promise<boolean> => {
 
   if (currentDataSource === 'firebase') {
     try {
-      await ensureAuth();
       const formRef = doc(firebaseDb, 'forms', formId);
       await deleteDoc(formRef);
       return true;
@@ -239,28 +234,14 @@ export const createSubmission = async (submissionData: Omit<FormSubmission, 'id'
 
   if (currentDataSource === 'firebase') {
     try {
-      // ⚠️ NE PAS vérifier l'authentification pour les soumissions publiques
-      // Les visiteurs non-authentifiés doivent pouvoir s'inscrire
-      // await ensureAuth(); // COMMENTÉ POUR AUTORISER LES INSCRIPTIONS PUBLIQUES
-
-      // Utiliser directement la fonction createSubmission de firebase.ts
-      // qui gère l'authentification anonyme automatiquement
-      const { createSubmission: firebaseCreateSubmission } = await import('./firebase');
-
-      const submission = await firebaseCreateSubmission({
-        form_id: submissionData.form_id || '',
-        matricule: submissionData.matricule || '',
-        submission_data: submissionData.submission_data || {},
-        filiere_id: submissionData.filiere_id || null,
-        filiere_name: submissionData.filiere_name || null,
-        mention: submissionData.mention || null,
-        filiere_id_2: submissionData.filiere_id_2 || null,
-        filiere_name_2: submissionData.filiere_name_2 || null,
-        mention_2: submissionData.mention_2 || null,
-        status: submissionData.status || 'pending'
+      const submissionsRef = collection(firebaseDb, 'form_submissions');
+      const docRef = await addDoc(submissionsRef, {
+        ...submissionData,
+        submitted_at: Timestamp.now(),
+        created_at: Timestamp.now(),
+        updated_at: Timestamp.now()
       });
-
-      return submission.id;
+      return docRef.id;
     } catch (error) {
       console.error('❌ Erreur Firebase:', error);
       return null;
@@ -289,7 +270,6 @@ export const updateSubmissionStatus = async (
 
   if (currentDataSource === 'firebase') {
     try {
-      await ensureAuth();
       const submissionRef = doc(firebaseDb, 'form_submissions', submissionId);
       await updateDoc(submissionRef, {
         status,
@@ -320,7 +300,6 @@ export const deleteSubmission = async (submissionId: string): Promise<boolean> =
 
   if (currentDataSource === 'firebase') {
     try {
-      await ensureAuth();
       const submissionRef = doc(firebaseDb, 'form_submissions', submissionId);
       await deleteDoc(submissionRef);
       return true;
@@ -348,7 +327,6 @@ export const getEvents = async () => {
 
   if (currentDataSource === 'firebase') {
     try {
-      await ensureAuth();
       const eventsRef = collection(firebaseDb, 'events');
       const snapshot = await getDocs(eventsRef);
 
@@ -380,7 +358,6 @@ export const getContentItems = async () => {
 
   if (currentDataSource === 'firebase') {
     try {
-      await ensureAuth();
       const contentRef = collection(firebaseDb, 'content_items');
       const snapshot = await getDocs(contentRef);
 
@@ -412,7 +389,6 @@ export const getForumPosts = async () => {
 
   if (currentDataSource === 'firebase') {
     try {
-      await ensureAuth();
       const forumRef = collection(firebaseDb, 'forum_posts');
       const snapshot = await getDocs(forumRef);
 

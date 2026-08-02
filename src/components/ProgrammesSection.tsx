@@ -3,7 +3,11 @@ import { GraduationCap, BookOpen, Users, Award, ChevronRight, Clock, MapPin, Sta
 import { getForms } from '../lib/supabase';
 import type { DynamicForm, Filiere } from '../lib/supabase';
 
-const ProgrammesSection: React.FC = () => {
+interface ProgrammesSectionProps {
+  setActiveSection: (section: string) => void;
+}
+
+const ProgrammesSection: React.FC<ProgrammesSectionProps> = ({ setActiveSection }) => {
   const [filieres, setFilieres] = useState<Filiere[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -17,89 +21,68 @@ const ProgrammesSection: React.FC = () => {
     try {
       setLoading(true);
       setError(null);
-
-      // TOUJOURS utiliser les 10 filières complètes officielles de l'ISTM Kinshasa
-      const officialFilieres: Filiere[] = [
+      
+      console.log('🎓 Chargement des filières depuis les formulaires...');
+      const forms = await getForms();
+      
+      // Extraire les filières du premier formulaire trouvé (généralement le formulaire d'inscription)
+      const mainForm = forms.find(form => form.status === 'published') || forms[0];
+      
+      if (mainForm && mainForm.filieres && mainForm.filieres.length > 0) {
+        setFilieres(mainForm.filieres);
+        console.log(`✅ ${mainForm.filieres.length} filière(s) chargée(s)`);
+      } else {
+        // Données de démonstration si aucune filière n'est trouvée
+        const demoFilieres: Filiere[] = [
           {
             id: 'bm',
-            name: 'Biologie Médicale',
+            name: 'Biologie Médicale (BM)',
             mentions: [
-              'Techniques de laboratoire'
-            ]
-          },
-          {
-            id: 'gos',
-            name: 'Gestion des Organisations de santé',
-            mentions: [
-              'Management des services de santé',
-              'Gestion des opérations et des logistiques médicales'
-            ]
-          },
-          {
-            id: 'hstge',
-            name: 'Hygiène, Sécurité au Travail et Gestion de l\'Environnement',
-            mentions: [
-              'Hygiène, Sécurité au Travail et Gestion de l\'Environnement'
-            ]
-          },
-          {
-            id: 'im',
-            name: 'Imagerie Médicale',
-            mentions: [
-              'Techniques d\'imagerie médicale'
-            ]
-          },
-          {
-            id: 'smra',
-            name: 'Sciences de la Motricité et de la Résadaptation',
-            mentions: [
-              'Kinésithérapie'
-            ]
-          },
-          {
-            id: 'sand',
-            name: 'Sciences des aliments, Nutrition et Diététique',
-            mentions: [
-              'Sciences des aliments, Nutrition et Diététique'
-            ]
-          },
-          {
-            id: 'sf',
-            name: 'Sage-femme',
-            mentions: [
-              'Sage-femme'
-            ]
-          },
-          {
-            id: 'sc',
-            name: 'Santé communautaire',
-            mentions: [
-              'Santé communautaire'
+              'Techniques de laboratoire',
+              'Analyses biomédicales',
+              'Microbiologie médicale',
+              'Hématologie',
+              'Biochimie clinique'
             ]
           },
           {
             id: 'si',
-            name: 'Sciences infirmières',
+            name: 'Soins Infirmiers (SI)',
             mentions: [
-              'Anesthésie et réanimation',
-              'Enseignement et administration en soins infirmiers',
               'Soins généraux',
-              'Santé mentale et soins psychiatriques',
-              'Soins oculaires',
-              'Soins pédiatriques'
+              'Soins intensifs',
+              'Pédiatrie',
+              'Chirurgie',
+              'Santé communautaire'
             ]
           },
           {
-            id: 'tp',
-            name: 'Techniques pharmaceutiques',
+            id: 'im',
+            name: 'Imagerie Médicale (IM)',
             mentions: [
-              'Techniques pharmaceutiques'
+              'Radiologie conventionnelle',
+              'Échographie',
+              'Scanner (TDM)',
+              'IRM',
+              'Médecine nucléaire'
+            ]
+          },
+          {
+            id: 'gos',
+            name: 'Gestion des Organisations de Santé (GOS)',
+            mentions: [
+              'Management en Santé',
+              'Administration hospitalière',
+              'Économie de la santé',
+              'Qualité des soins',
+              'Systèmes d\'information santé'
             ]
           }
         ];
-
-      setFilieres(officialFilieres);
-      console.log(`✅ ${officialFilieres.length} filière(s) officielles chargées (ISTM Kinshasa)`);
+        
+        setFilieres(demoFilieres);
+        console.log('📋 Utilisation des filières de démonstration');
+      }
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Erreur inconnue';
       setError(errorMessage);
@@ -112,25 +95,17 @@ const ProgrammesSection: React.FC = () => {
   const getFiliereIcon = (filiereId: string) => {
     switch (filiereId.toLowerCase()) {
       case 'bm':
+      case 'biologie':
         return '🔬';
-      case 'gos':
-        return '📊';
-      case 'hstge':
-        return '🛡️';
-      case 'im':
-        return '📡';
-      case 'smra':
-        return '💪';
-      case 'sand':
-        return '🍎';
-      case 'sf':
-        return '👶';
-      case 'sc':
-        return '🏘️';
       case 'si':
+      case 'soins':
         return '🏥';
-      case 'tp':
-        return '💊';
+      case 'im':
+      case 'imagerie':
+        return '📡';
+      case 'gos':
+      case 'gestion':
+        return '📊';
       default:
         return '🎓';
     }
@@ -143,11 +118,7 @@ const ProgrammesSection: React.FC = () => {
       'from-purple-500 to-purple-600',
       'from-orange-500 to-orange-600',
       'from-red-500 to-red-600',
-      'from-indigo-500 to-indigo-600',
-      'from-teal-500 to-teal-600',
-      'from-pink-500 to-pink-600',
-      'from-yellow-500 to-yellow-600',
-      'from-cyan-500 to-cyan-600'
+      'from-indigo-500 to-indigo-600'
     ];
     return colors[index % colors.length];
   };
@@ -159,11 +130,7 @@ const ProgrammesSection: React.FC = () => {
       'border-purple-200 hover:border-purple-400',
       'border-orange-200 hover:border-orange-400',
       'border-red-200 hover:border-red-400',
-      'border-indigo-200 hover:border-indigo-400',
-      'border-teal-200 hover:border-teal-400',
-      'border-pink-200 hover:border-pink-400',
-      'border-yellow-200 hover:border-yellow-400',
-      'border-cyan-200 hover:border-cyan-400'
+      'border-indigo-200 hover:border-indigo-400'
     ];
     return colors[index % colors.length];
   };
@@ -276,7 +243,7 @@ const ProgrammesSection: React.FC = () => {
                       <div className="flex items-center space-x-4 text-sm opacity-90">
                         <span className="flex items-center">
                           <BookOpen className="h-4 w-4 mr-1" />
-                          {filiere.mentions.length} mention{filiere.mentions.length > 1 ? 's' : ''}
+                          {filiere.mentions.length} mentions
                         </span>
                         <span className="flex items-center">
                           <Clock className="h-4 w-4 mr-1" />
@@ -353,17 +320,12 @@ const ProgrammesSection: React.FC = () => {
             Nos programmes sont conçus pour former les professionnels de santé de demain.
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
-            <a
-              href="https://www.jober.space/inscription"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="bg-white text-blue-600 px-8 py-4 rounded-lg font-semibold hover:bg-gray-100 transition-colors duration-300 transform hover:scale-105 shadow-lg inline-flex items-center justify-center space-x-2"
+            <button
+              onClick={() => setActiveSection('inscription')}
+              className="bg-white text-blue-600 px-8 py-4 rounded-lg font-semibold hover:bg-gray-100 transition-colors duration-300 transform hover:scale-105 shadow-lg"
             >
-              <span>Commencer l'inscription</span>
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
-              </svg>
-            </a>
+              Commencer l'inscription
+            </button>
             <button className="border-2 border-white text-white hover:bg-white hover:text-blue-600 px-8 py-4 rounded-lg font-semibold transition-all duration-300 transform hover:scale-105">
               Télécharger la brochure
             </button>

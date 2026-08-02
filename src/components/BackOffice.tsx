@@ -1,12 +1,10 @@
 import React, { useState } from 'react';
-import { Plus, CreditCard as Edit, Trash2, Users, Calendar, MessageSquare, BookOpen, Settings, BarChart3, Bell, FileText, Lock, Image, GraduationCap } from 'lucide-react';
+import { Plus, Edit, Trash2, Users, Calendar, MessageSquare, BookOpen, Settings, BarChart3, Bell, FileText, Lock, Image } from 'lucide-react';
 import DynamicFormBuilder from './DynamicFormBuilder';
 import { useAuth } from './AuthGuard';
 import FirebaseDiagnostics from './FirebaseDiagnostics';
 import ContentManagement from './ContentManagement';
-import StudentsDirectory from './StudentsDirectory';
-import { createEvent } from '../lib/firebase';
-import type { Event as FirebaseEvent } from '../lib/firebase';
+import DatabaseSelector from './DatabaseSelector';
 
 interface Event {
   id: string;
@@ -133,7 +131,6 @@ const BackOffice: React.FC = () => {
     { id: 'forums', label: 'Forums', icon: MessageSquare },
     { id: 'classes', label: 'Classes', icon: BookOpen },
     ...(isAdmin() ? [
-      { id: 'students-directory', label: 'Étudiants', icon: GraduationCap },
       { id: 'users', label: 'Utilisateurs', icon: Users },
       { id: 'notifications', label: 'Notifications', icon: Bell },
       { id: 'settings', label: 'Paramètres', icon: Settings }
@@ -172,10 +169,9 @@ const BackOffice: React.FC = () => {
         return;
       }
 
-      console.log('💾 Sauvegarde de l\'événement dans Firebase...');
-
-      // Créer l'événement dans Firebase
-      const eventData: Partial<FirebaseEvent> = {
+      // Créer le nouvel événement
+      const eventToCreate: Event = {
+        id: Date.now().toString(),
         type: selectedEventType,
         title: newEvent.title,
         description: newEvent.description,
@@ -183,30 +179,13 @@ const BackOffice: React.FC = () => {
         time: newEvent.time,
         location: newEvent.location,
         instructor: newEvent.instructor || undefined,
-        max_participants: newEvent.maxParticipants ? parseInt(newEvent.maxParticipants) : undefined,
+        participants: 0,
+        maxParticipants: newEvent.maxParticipants ? parseInt(newEvent.maxParticipants) : undefined,
         status: 'draft'
       };
 
-      const createdEvent = await createEvent(eventData);
-
-      console.log('✅ Événement sauvegardé avec succès!');
-
-      // Ajouter l'événement créé à la liste locale
-      const eventToDisplay: Event = {
-        id: createdEvent.id,
-        type: createdEvent.type,
-        title: createdEvent.title,
-        description: createdEvent.description,
-        date: createdEvent.date,
-        time: createdEvent.time,
-        location: createdEvent.location,
-        instructor: createdEvent.instructor,
-        participants: createdEvent.participants,
-        maxParticipants: createdEvent.max_participants,
-        status: createdEvent.status
-      };
-
-      setEvents(prev => [eventToDisplay, ...prev]);
+      // Ajouter à la liste des événements
+      setEvents(prev => [...prev, eventToCreate]);
 
       // Réinitialiser le formulaire
       setNewEvent({
@@ -221,11 +200,12 @@ const BackOffice: React.FC = () => {
       setSelectedEventType('event');
       setShowCreateModal(false);
 
-      alert('Événement créé avec succès!');
+      // Optionnel: Afficher un message de succès
+      console.log('Événement créé avec succès:', eventToCreate);
 
     } catch (error) {
-      console.error('❌ Erreur lors de la création de l\'événement:', error);
-      setSubmitError('Erreur lors de la création de l\'événement. Veuillez réessayer.');
+      console.error('Erreur lors de la création de l\'événement:', error);
+      setSubmitError('Erreur lors de la création de l\'événement');
     } finally {
       setIsSubmitting(false);
     }
@@ -237,6 +217,8 @@ const BackOffice: React.FC = () => {
 
   const renderDashboard = () => (
     <div className="space-y-6">
+      <DatabaseSelector />
+
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         <div className="bg-white p-6 rounded-xl shadow-md">
           <div className="flex items-center justify-between">
@@ -641,7 +623,7 @@ const BackOffice: React.FC = () => {
           {activeTab === 'dashboard' && renderDashboard()}
           {activeTab === 'forms' && <DynamicFormBuilder />}
           {activeTab === 'content' && <ContentManagement />}
-          {activeTab === 'students-directory' && <StudentsDirectory />}
+          {(activeTab === 'students' || activeTab === 'users') && <StudentManagement />}
           {(activeTab === 'events' || activeTab === 'conferences' || activeTab === 'forums' || activeTab === 'classes') && renderEventsList()}
           {activeTab === 'users' && (
             <div className="bg-white p-6 rounded-xl shadow-md">
