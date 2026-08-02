@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Play, FileText, Image, Eye, Heart, MessageCircle, ChevronLeft, ChevronRight, ArrowRight } from 'lucide-react';
-import { collection, getDocs, query, orderBy, limit } from 'firebase/firestore';
-import { db } from '../lib/firebase';
+import { supabase } from '../lib/supabase';
 
 interface ContentItem {
   id: string;
@@ -15,6 +14,8 @@ interface ContentItem {
   likes: number;
   views: number;
   comments: any[];
+  is_featured?: boolean;
+  featured_order?: number;
 }
 
 interface FeaturedContentSectionProps {
@@ -48,39 +49,44 @@ const FeaturedContentSection: React.FC<FeaturedContentSectionProps> = ({ setActi
       setLoading(true);
       setError(null);
 
-      console.log('🎯 Chargement du contenu vedette depuis Firebase pour la page d\'accueil...');
+      const { data, error: fetchError } = await supabase
+        .from('content_items')
+        .select('*')
+        .order('created_at', { ascending: false })
+        .limit(6);
 
-      const contentRef = collection(db, 'content_items');
-      const q = query(contentRef, orderBy('created_at', 'desc'), limit(6));
-      const snapshot = await getDocs(q);
+      if (fetchError) throw fetchError;
 
-      const items: ContentItem[] = snapshot.docs.map(doc => {
-        const data = doc.data();
-        return {
-          id: doc.id,
-          type: data.type || 'article',
-          title: data.title || '',
-          description: data.description || '',
-          url: data.url || '',
-          thumbnail: data.thumbnail || null,
-          author: data.author || 'Anonyme',
-          date: data.date || new Date().toISOString().split('T')[0],
-          likes: data.likes || 0,
-          views: data.views || 0,
-          comments: data.comments || []
-        };
+      const items: ContentItem[] = (data || []).map((row: any) => ({
+        id: row.id,
+        type: row.type || 'article',
+        title: row.title || '',
+        description: row.description || '',
+        url: row.url || '',
+        thumbnail: row.thumbnail || null,
+        author: row.author || 'Anonyme',
+        date: row.date || new Date().toISOString().split('T')[0],
+        likes: row.likes || 0,
+        views: row.views || 0,
+        comments: row.comments || [],
+        is_featured: row.is_featured || false,
+        featured_order: row.featured_order || 0
+      }));
+
+      items.sort((a, b) => {
+        if (a.is_featured && !b.is_featured) return -1;
+        if (!a.is_featured && b.is_featured) return 1;
+        if (a.is_featured && b.is_featured) return (a.featured_order || 0) - (b.featured_order || 0);
+        return 0;
       });
 
       if (items.length > 0) {
         setContentItems(items);
-        console.log(`✅ ${items.length} élément(s) de contenu chargé(s) pour le carrousel`);
-      } else {
-        console.log('📭 Aucun contenu disponible pour le carrousel');
       }
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Erreur inconnue';
       setError(errorMessage);
-      console.error('❌ Erreur lors du chargement du contenu vedette:', err);
+      console.error('Erreur lors du chargement du contenu vedette:', err);
     } finally {
       setLoading(false);
     }

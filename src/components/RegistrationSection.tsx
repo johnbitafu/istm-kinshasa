@@ -12,13 +12,7 @@ interface FormData {
   selectedMention2: string;
 }
 
-const REGISTRATION_URL = 'https://joberform.space/portail/institut-superieur-des-techniques-medicales-de-kin-mri54k3j';
-
 const RegistrationSection: React.FC = () => {
-  const goToRegistrationForm = () => {
-    window.location.href = REGISTRATION_URL;
-  };
-
   const [currentStep, setCurrentStep] = useState(1);
   const [isSubmitted, setIsSubmitted] = useState(false);
   const [studentMatricule, setStudentMatricule] = useState<string>('');
@@ -526,7 +520,7 @@ const generatePDF = () => {
     generateStudentPDF(studentData);
   }
 };
-
+  
   if (loading) {
     return <div className="flex justify-center items-center h-64">
       <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
@@ -1207,8 +1201,8 @@ if (isConfirmationStep) {
                   <h2 className="text-2xl font-bold text-gray-900">
                     Étapes d'inscription, frais éxigés et conditions d'admission
                   </h2>
-                  <button
-                    onClick={goToRegistrationForm}
+                  <button 
+                    onClick={() => setShowConditionsModal(false)}
                     className="text-gray-500 hover:text-gray-700 text-2xl"
                   >
                     <X className="h-6 w-6" />
@@ -1335,8 +1329,8 @@ if (isConfirmationStep) {
                 </div>
 
                 <div className="mt-8 flex justify-center">
-                  <button
-                    onClick={goToRegistrationForm}
+                  <button 
+                    onClick={() => setShowConditionsModal(false)}
                     className="bg-blue-600 hover:bg-blue-700 text-white px-8 py-3 rounded-lg font-semibold transition-colors duration-200"
                   >
                     S'inscrire maintenant

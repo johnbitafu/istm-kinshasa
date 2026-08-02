@@ -1,7 +1,6 @@
 import React, { useState, createContext, useContext } from 'react';
 import { User, Lock, Eye, EyeOff } from 'lucide-react';
-import { getSubmissions } from '../lib/supabase';
-import type { FormSubmission } from '../lib/supabase';
+import { supabase } from '../lib/supabase';
 
 // Add a UUID validation function
 const isUUID = (uuid: string): boolean => {
@@ -73,38 +72,32 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   });
 
   const login = async (matricule: string): Promise<boolean> => {
-    await new Promise(resolve => setTimeout(resolve, 1000));
-    
+    await new Promise(resolve => setTimeout(resolve, 500));
+
     try {
-      console.log('🔍 Vérification du matricule:', matricule);
-      
-      // Charger les inscriptions depuis Firebase
-      const submissions = await getSubmissions();
-      console.log('📋 Inscriptions chargées:', submissions.length);
-      
-      // Chercher l'étudiant avec ce matricule
-      const studentSubmission = submissions.find(s => 
-        s.matricule === matricule && s.status === 'approved'
-      );
-      
-      if (studentSubmission) {
-        // Créer l'utilisateur étudiant à partir de l'inscription
+      const { data, error } = await supabase
+        .from('students')
+        .select('id, matricule, full_name, email, status')
+        .eq('matricule', matricule)
+        .eq('status', 'approved')
+        .maybeSingle();
+
+      if (error) throw error;
+
+      if (data) {
         const studentUser: User = {
-          id: studentSubmission.id,
-          matricule: studentSubmission.matricule,
-          name: `${studentSubmission.submission_data.Nom || studentSubmission.submission_data.nom} ${studentSubmission.submission_data['Post-Nom'] || studentSubmission.submission_data['post-nom']} ${studentSubmission.submission_data.Prénom || studentSubmission.submission_data.prenom}`.trim(),
-          email: studentSubmission.submission_data['E-mail'] || studentSubmission.submission_data.email || '',
+          id: data.id,
+          matricule: data.matricule,
+          name: data.full_name,
+          email: data.email || '',
           role: 'student'
         };
-        
+
         setUser(studentUser);
         localStorage.setItem('istm_user', JSON.stringify(studentUser));
-        
-        console.log('✅ Connexion étudiant réussie pour:', matricule);
         return true;
       }
 
-      console.log('❌ Matricule non trouvé ou non approuvé');
       return false;
     } catch (error) {
       console.error('Erreur de connexion:', error);

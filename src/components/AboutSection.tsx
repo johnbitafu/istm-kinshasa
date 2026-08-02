@@ -1,6 +1,5 @@
 import React from 'react';
-import { Link } from 'react-router-dom';
-import { Microscope, Users2, Globe, Target } from 'lucide-react';
+import { Microscope, Users as Users2, Globe, Target } from 'lucide-react';
 
 const AboutSection: React.FC = () => {
   const features = [
@@ -63,12 +62,14 @@ const AboutSection: React.FC = () => {
 
 
 
-                  <Link 
-            to="/inscription"
+                  <a
+            href="https://joberform.space/portail/institut-superieur-des-techniques-medicales-de-kin-mri54k3j"
+            target="_blank"
+            rel="noopener noreferrer"
             className="bg-white text-blue-600 px-8 py-4 rounded-lg font-semibold hover:bg-gray-100 transition-colors duration-300 transform hover:scale-105 shadow-lg inline-block"
           >
             Commencer l'inscription
-          </Link>
+          </a>
 
           
           {/* <div className="flex flex-col sm:flex-row gap-4 justify-center mb-16">
